@@ -1,0 +1,150 @@
+import os
+import time
+import random
+import json
+import logging
+from threading import Lock
+import telebot
+
+# --- Настройка логирования ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- Конфигурация ---
+TOKEN = "8109307891:AAHSqQtacU_Ar_1srMJisLqD1eEPEP" # Твой токен
+bot = telebot.TeleBot(TOKEN)
+
+# Данные игры
+REAL_PHONES = [
+    ("iPhone 12", 60000),
+    ("Samsung Galaxy S21", 55000),
+    ("Xiaomi Mi 11", 40000),
+    ("Google Pixel 5", 38000),
+    ("iPhone 13 Pro", 90000),
+]
+
+CONDITIONS = {
+    "✅ Б/У Хорошее": 0.7,
+    "✨ Идеальное": 1.0,
+    "🛠 Требует ремонта": 0.4
+}
+
+USERS_FILE = "users.json"
+lock = Lock()
+_users = {}
+
+# --- Работа с данными ---
+def load_users():
+    global _users
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, "r", encoding="utf-8") as f:
+                _users = json.load(f)
+        except: _users = {}
+
+def save_users():
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(_users, f, ensure_ascii=False, indent=2)
+
+def get_user(m):
+    uid = str(m.from_user.id)
+    with lock:
+        if uid not in _users:
+            _users[uid] = {
+                "name": m.from_user.first_name or "Перекуп",
+                "balance": 20000,
+                "inventory": [],
+                "last_flip": 0
+            }
+            save_users()
+        return _users[uid]
+
+load_users()
+
+# --- Команды ---
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(m):
+    welcome_text = (
+        "📱 **Добро пожаловать в Симулятор Перекупа!**\n\n"
+        "Твои команды:\n"
+        "💰 `Заработать` — пойти на подработку\n"
+        "🃏 `Карт` — купить случайный телефон за 10,000$\n"
+        "📦 `Инвентарь` — список твоих девайсов\n"
+        "👤 `Профиль` — твой баланс\n"
+        "🤝 `Продать [номер]` — продать телефон из списка"
+    )
+    bot.send_message(m.chat.id, welcome_text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'заработать')
+def earn(m):
+    user = get_user(m)
+    gain = random.randint(3000, 7000)
+    with lock:
+        user["balance"] += gain
+        save_users()
+    bot.send_message(m.chat.id, f"🔨 Ты перепродал чехол и кабель: **+{gain:,}$**", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'карт')
+def flip(m):
+    user = get_user(m)
+    cost = 10000
+    
+    if user["balance"] < cost:
+        return bot.send_message(m.chat.id, f"❌ Не хватает денег! Нужно {cost:,}$")
+
+    with lock:
+        user["balance"] -= cost
+        model, base_p = random.choice(REAL_PHONES)
+        cond_name, mult = random.choice(list(CONDITIONS.items()))
+        final_price = int(base_p * mult)
+        
+        item = {"full_name": model, "price": final_price, "condition": cond_name}
+        user["inventory"].append(item)
+        save_users()
+
+    bot.send_message(m.chat.id, f"🎁 **Выпал лот!**\n\n📱 {model}\nСостояние: {cond_name}\nРыночная цена: {final_price:,}$", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'инвентарь')
+def show_inv(m):
+    user = get_user(m)
+    if not user["inventory"]:
+        return bot.send_message(m.chat.id, "📦 Твой склад пуст. Покупай телефоны командой `карт`!")
+    
+    text = "📦 **Твой склад:**\n\n"
+    for i, item in enumerate(user["inventory"], 1):
+        text += f"{i}. {item['full_name']} — {item['price']:,}$ ({item['condition']})\n"
+    text += "\nЧтобы продать, напиши: `Продать 1`"
+    bot.send_message(m.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: m.text and m.text.lower().startswith('продать'))
+def sell(m):
+    user = get_user(m)
+    try:
+        idx = int(m.text.split()[-1]) - 1
+        with lock:
+            if 0 <= idx < len(user["inventory"]):
+                item = user["inventory"].pop(idx)
+                # Выкупаем за 85% от рыночной цены
+                sell_price = int(item["price"] * 0.85)
+                user["balance"] += sell_price
+                save_users()
+                bot.send_message(m.chat.id, f"🤝 Сделка закрыта! **{item['full_name']}** продан за **{sell_price:,}$**", parse_mode="Markdown")
+            else:
+                bot.send_message(m.chat.id, "❌ Нет такого номера в инвентаре.")
+    except:
+        bot.send_message(m.chat.id, "❌ Напиши: `Продать [номер]` (например, Продать 1)")
+
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'профиль')
+def profile(m):
+    user = get_user(m)
+    inv_sum = sum(i["price"] for i in user["inventory"])
+    msg = (f"👤 **Профиль: {user['name']}**\n"
+           f"💰 Баланс: `{user['balance']:,}$`\n"
+           f"📦 Стоимость склада: `{inv_sum:,}$`\n"
+           f"📱 Всего устройств: {len(user['inventory'])}")
+    bot.send_message(m.chat.id, msg, parse_mode="Markdown")
+
+if __name__ == "__main__":
+    print("Бот запущен и ждет сообщений...")
+    bot.infinity_polling()
