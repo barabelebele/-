@@ -307,7 +307,7 @@ def casino(m):
  amount = int(m.text.split()[-1])
  if amount <= 0 or amount > user["balance"]:
  return bot.send_message(m.chat.id, "❌ У тебя нет столько
-денег или неверная сумма!")
+денег или неверная сумма!!")
  # списываем ставку
  user["balance"] -= amount
  if random.random() < 0.4: # 40% на победу
