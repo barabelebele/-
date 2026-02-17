@@ -1,275 +1,340 @@
 import os, time, random, json, logging, tempfile
 from threading import Lock
 import telebot
-
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 # --- ТОКЕН (оставлен как в оригинале) ---
-TOKEN = os.getenv("TG_BOT_TOKEN") or "8109307891:AAHSqQtacU_Ar_1srMJisLqD1eEPEXocmls"
+TOKEN = os.getenv("TG_BOT_TOKEN") or
+"8109307891:AAHSqQtacU_Ar_1srMJisLqD1eEPEXocmls"
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
-
 # --- Настройки игры ---
 # Телефоны по редкостям (название, базовая цена)
 PHONES_POOLS = {
-    "обычный": [
-        ("Nokia 3310", 1500), ("iPhone 11", 30000), ("Xiaomi 14", 80000)
-    ],
-    "необычный": [
-        ("iPhone 13", 55000), ("Pixel 8 Pro", 95000), ("Sony Xperia 1", 90000)
-    ],
-    "редкий": [
-        ("Motorola RAZR", 110000), ("Samsung S24 Ultra", 125000)
-    ],
-    "эпик": [
-        ("iPhone 15 Pro", 130000)
-    ],
-    "легендарный": [
-        ("Custom Ultra", 250000)
-    ]
+ "обычный": [
+ ("Nokia 3310", 1500), ("iPhone 11", 30000), ("Xiaomi 14", 80000)
+ ],
+ "необычный": [
+ ("iPhone 13", 55000), ("Pixel 8 Pro", 95000), ("Sony Xperia 1",
+90000)
+ ],
+ "редкий": [
+ ("Motorola RAZR", 110000), ("Samsung S24 Ultra", 125000)
+ ],
+ "эпик": [
+ ("iPhone 15 Pro", 130000)
+ ],
+ "легендарный": [
+ ("Custom Ultra", 250000)
+ ]
 }
-
 # Цены за покупку по редкости (фиксировано для магазина)
 RARITY_PRICES = {
-    "обычный": 5000,
-    "необычный": 12000,
-    "редкий": 35000,
-    "эпик": 80000,
-    "легендарный": 160000
+ "обычный": 5000,
+ "необычный": 12000,
+ "редкий": 35000,
+ "эпик": 80000,
+ "легендарный": 160000
 }
-
 # Множители состояния при оценке телефона (для конечной цены)
-COND_MULT = {"✨ Идеальное": 1.1, "✅ Хорошее": 0.8, "🤔 Потрепанное": 0.5, "✅ Б/У": 0.3}
-
+COND_MULT = {"✨ Идеальное": 1.1, "✅ Хорошее": 0.8, "🤔 Потрепанное":
+0.5, "✅ Б/У": 0.3}
 # Старый список (если нужно)
 PHONES = [
-    ("iPhone 11", 30000), ("iPhone 13", 55000), ("iPhone 15 Pro", 130000),
-    ("Nokia 3310", 150000), ("Samsung S24 Ultra", 125000), ("Xiaomi 14", 80000),
-    ("Sony Xperia 1", 90000), ("Motorola RAZR", 110000), ("Pixel 8 Pro", 95000)
+ ("iPhone 11", 30000), ("iPhone 13", 55000), ("iPhone 15 Pro",
+130000),
+ ("Nokia 3310", 150000), ("Samsung S24 Ultra", 125000), ("Xiaomi 14",
+80000),
+ ("Sony Xperia 1", 90000), ("Motorola RAZR", 110000), ("Pixel 8 Pro",
+95000)
 ]
-
 PHRASES = [
-    "Ден пед и К",
-    "Батя Андрея сочный",
-    "Жека пдр",
-    "Илья еб Диану"
+ "Ден пед и К",
+ "Батя Андрея сочный",
+ "Жека пдр",
+ "Илья еб Диану"
 ]
-
 USERS_FILE = "users.json"
 lock = Lock()
 _users = {}
-
 # --- Система сохранения/загрузки (атомарная запись) ---
 def load_users():
-    global _users
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, "r", encoding="utf-8") as f:
-                _users = json.load(f)
-                logger.info("База данных игроков успешно загружена.")
-        except Exception as e:
-            logger.error(f"Ошибка чтения базы: {e}")
-            _users = {}
-    else:
-        _users = {}
-        save_users()
-
+ global _users
+ if os.path.exists(USERS_FILE):
+ try:
+ with open(USERS_FILE, "r", encoding="utf-8") as f:
+ _users = json.load(f)
+ logger.info("База данных игроков успешно загружена.")
+ except Exception as e:
+ logger.error(f"Ошибка чтения базы: {e}")
+ _users = {}
+ else:
+ _users = {}
+ save_users()
 def save_users():
-    with lock:
-        try:
-            dirn = os.path.dirname(os.path.abspath(USERS_FILE)) or "."
-            fd, tmp_path = tempfile.mkstemp(dir=dirn)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(_users, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, USERS_FILE)
-        except Exception as e:
-            logger.error(f"Ошибка сохранения базы: {e}")
-
+ with lock:
+ try:
+ dirn = os.path.dirname(os.path.abspath(USERS_FILE)) or "."
+ fd, tmp_path = tempfile.mkstemp(dir=dirn)
+ with os.fdopen(fd, "w", encoding="utf-8") as f:
+ json.dump(_users, f, ensure_ascii=False, indent=2)
+ os.replace(tmp_path, USERS_FILE)
+ except Exception as e:
+ logger.error(f"Ошибка сохранения базы: {e}")
 def get_user(m):
-    uid = str(m.from_user.id)
-    if uid not in _users:
-        _users[uid] = {
-            "name": m.from_user.first_name or "Перекуп",
-            "balance": 10000,
-            "inventory": [],
-            "last_flip": 0,
-            "exp": 0,
-            "lvl": 1
-        }
-        save_users()
-    return _users[uid]
-
+ uid = str(m.from_user.id)
+ if uid not in _users:
+ _users[uid] = {
+ "name": m.from_user.first_name or "Перекуп",
+ "balance": 10000,
+ "inventory": [],
+ "last_flip": 0,
+ "exp": 0,
+ "lvl": 1
+ }
+ save_users()
+ return _users[uid]
 # --- Игровая логика ---
 def add_exp(user, amount):
-    user["exp"] += amount
-    next_lvl = user["lvl"] * 100
-    if user["exp"] >= next_lvl:
-        user["lvl"] += 1
-        user["exp"] = 0
-        return True
-    return False
-
+ user["exp"] += amount
+ next_lvl = user["lvl"] * 100
+ if user["exp"] >= next_lvl:
+ user["lvl"] += 1
+ user["exp"] = 0
+ return True
+ return False
 # --- Команды бота ---
-
 @bot.message_handler(commands=['start', 'help'])
 def start_cmd(m):
-    msg = ("📱 *ДОБРО ПОЖАЛОВАТЬ В СИМУЛЯТОР ПЕРЕКУПА!*\n\n"
-           "💵 *Заработок:*\n"
-           "• `заработать` — пойти на смену в сервис\n"
-           "• `карт` — фишка за 100 с фразой\n"
-           "• `ставка [сумма]` — рискнуть в казино\n\n"
-           "🛍 *Магазин / Торговля:*\n"
-           "• `магазин` — открыть магазин (купить телефон по редкости или кейс)\n"
-           "• `купить телефон [редкость]` — купить телефон выбранной редкости\n"
-           "• `купить кейс` или `купить 1` — открыть кейс (15,000$)\n"
-           "• `тл` — посмотреть свои телефоны\n"
-           "• `продать [номер]` — продать телефон из списка (например: `продать 1`)\n\n"
-           "📊 *Прочее:*\n"
-           "• `профиль` — твоя статистика\n"
-           "• `топ` — список лучших")
-    bot.send_message(m.chat.id, msg)
+ msg = ("📱 *ДОБРО ПОЖАЛОВАТЬ В СИМУЛЯТОР ПЕРЕКУПА!*
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'заработать')
+"
+ "💵 *Заработок:*
+"
+ "• `заработать` — пойти на смену в сервис
+"
+ "• `карт` — фишка за 100 с фразой
+"
+ "• `ставка [сумма]` — рискнуть в казино
+
+"
+ "🛍 *Магазин / Торговля:*
+"
+ "• `магазин` — открыть магазин (купить телефон по редкости или
+кейс)
+"
+ "• `купить телефон [редкость]` — купить телефон выбранной
+редкости
+"
+ "• `купить кейс` или `купить 1` — открыть кейс (15,000$)
+"
+ "• `тл` — посмотреть свои телефоны
+"
+ "• `продать [номер]` — продать телефон из списка (например:
+`продать 1`)
+
+"
+ "📊 *Прочее:*
+"
+ "• `профиль` — твоя статистика
+"
+ "• `топ` — список лучших")
+ bot.send_message(m.chat.id, msg)
+@bot.message_handler(func=lambda m: m.text and m.text.lower() ==
+'заработать')
 def earn_money(m):
-    user = get_user(m)
-    base = random.randint(1000, 3000)
-    bonus = user["lvl"] * 500
-    total = base + bonus
-    user["balance"] += total
-    save_users()
-    bot.send_message(m.chat.id, f"🛠 Ты починил пару экранов!\nПолучено: *{total:,}\(*\n_(Уровень {user['lvl']} дает бонус +{bonus:,}\))_")
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'магазин')
+ user = get_user(m)
+ base = random.randint(1000, 3000)
+ bonus = user["lvl"] * 500
+ total = base + bonus
+ user["balance"] += total
+ save_users()
+ bot.send_message(m.chat.id, f"🛠 Ты починил пару экранов!
+Получено: *
+{total:,}$*
+_(Уровень {user['lvl']} дает бонус +{bonus:,}$)_")
+@bot.message_handler(func=lambda m: m.text and m.text.lower() ==
+'магазин')
 def open_shop(m):
-    msg = ("🛒 *МАГАЗИН*\n\n"
-           "Выберите, что купить:\n"
-           "• `купить телефон [редкость]` — доступные редкости: обычный, необычный, редкий, эпик, легендарный\n"
-           "  Примеры: `купить телефон обычный`, `купить телефон редкий`\n"
-           "• `купить кейс` — Обычный кейс (random phone) — *15,000$*\n\n"
-           "Цены на покупку телефонов по редкости:\n")
-    for r, p in RARITY_PRICES.items():
-        msg += f"• *{r.title()}* — *{p:,}$*\n"
-    bot.send_message(m.chat.id, msg)
+ msg = ("🛒 *МАГАЗИН*
 
-@bot.message_handler(func=lambda m: m.text and (m.text.lower().startswith('купить 1') or m.text.lower().startswith('купить кейс') or m.text.lower() == 'купить кейс'))
+"
+ "Выберите, что купить:
+"
+ "• `купить телефон [редкость]` — доступные редкости: обычный,
+необычный, редкий, эпик, легендарный
+"
+ " Примеры: `купить телефон обычный`, `купить телефон
+редкий`
+"
+ "• `купить кейс` — Обычный кейс (random phone) —
+*15,000$*
+
+"
+ "Цены на покупку телефонов по редкости:
+")
+ for r, p in RARITY_PRICES.items():
+ msg += f"• *{r.title()}* — *{p:,}$*
+"
+ bot.send_message(m.chat.id, msg)
+@bot.message_handler(func=lambda m: m.text and
+(m.text.lower().startswith('купить 1') or
+m.text.lower().startswith('купить кейс') or m.text.lower() == 'купить
+кейс'))
 def buy_case(m):
-    user = get_user(m)
-    cost = 15000
-    if user["balance"] < cost:
-        return bot.send_message(m.chat.id, "❌ Не хватает денег! Иди заработай.")
-    p_name, p_price = random.choice(PHONES)
-    condition = random.choice(["✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное"])
-    mult = COND_MULT.get(condition, 1.0)
-    final_price = int(p_price * mult)
-    user["balance"] -= cost
-    user["inventory"].append({"name": p_name, "price": final_price, "cond": condition})
-    save_users()
-    bot.send_message(m.chat.id, f"📦 Из кейса выпал: *{p_name}*\nСостояние: {condition}\nОценен в: *{final_price:,}$*")
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower().startswith('купить телефон'))
+ user = get_user(m)
+ cost = 15000
+ if user["balance"] < cost:
+ return bot.send_message(m.chat.id, "❌ Не хватает денег! Иди
+заработай.")
+ p_name, p_price = random.choice(PHONES)
+ condition = random.choice(["✨ Идеальное", "✅ Хорошее", "🤔
+Потрепанное"])
+ mult = COND_MULT.get(condition, 1.0)
+ final_price = int(p_price * mult)
+ user["balance"] -= cost
+ user["inventory"].append({"name": p_name, "price": final_price,
+"cond": condition})
+ save_users()
+ bot.send_message(m.chat.id, f"📦 Из кейса выпал: *
+{p_name}*
+Состояние: {condition}
+Оценен в: *{final_price:,}$*")
+@bot.message_handler(func=lambda m: m.text and
+m.text.lower().startswith('купить телефон'))
 def buy_phone(m):
-    user = get_user(m)
-    parts = m.text.lower().split()
-    if len(parts) < 3:
-        return bot.send_message(m.chat.id, "❌ Напиши: `купить телефон [редкость]` (например: `купить телефон обычный`)")
-    rarity = parts[-1]
-    if rarity not in RARITY_PRICES:
-        return bot.send_message(m.chat.id, "❌ Неверная редкость. Доступные: обычный, необычный, редкий, эпик, легендарный")
-    cost = RARITY_PRICES[rarity]
-    if user["balance"] < cost:
-        return bot.send_message(m.chat.id, f"❌ Для покупки {rarity} телефона нужно {cost:,}\( — у тебя {user['balance']:,}\)")
-    pool = PHONES_POOLS.get(rarity, [])
-    if not pool:
-        return bot.send_message(m.chat.id, "❌ В этой редкости сейчас нет телефонов (ошибка).")
-    base_name, base_price = random.choice(pool)
-    # добавим случайность состояния
-    condition = random.choices(["✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное"], weights=[10, 60, 30])[0]
-    mult = COND_MULT.get(condition, 1.0)
-    final_price = int(base_price * mult)
-    user["balance"] -= cost
-    user["inventory"].append({"name": base_name, "price": final_price, "cond": condition})
-    save_users()
-    bot.send_message(m.chat.id, f"🛍 Ты купил {rarity} телефон: *{base_name}*\nСостояние: {condition}\nОценен для продажи: *{final_price:,}\(*\nСтоимость покупки: *{cost:,}\)*")
-
+ user = get_user(m)
+ parts = m.text.lower().split()
+ if len(parts) < 3:
+ return bot.send_message(m.chat.id, "❌ Напиши: `купить телефон
+[редкость]` (например: `купить телефон обычный`)")
+ rarity = parts[-1]
+ if rarity not in RARITY_PRICES:
+ return bot.send_message(m.chat.id, "❌ Неверная редкость.
+Доступные: обычный, необычный, редкий, эпик, легендарный")
+ cost = RARITY_PRICES[rarity]
+ if user["balance"] < cost:
+ return bot.send_message(m.chat.id, f"❌ Для покупки {rarity}
+телефона нужно {cost:,}$ ( — у тебя {user['balance']:,}$)")
+ pool = PHONES_POOLS.get(rarity, [])
+ if not pool:
+ return bot.send_message(m.chat.id, "❌ В этой редкости сейчас нет
+телефонов (ошибка).")
+ base_name, base_price = random.choice(pool)
+ # добавим случайность состояния
+ condition = random.choices(["✨ Идеальное", "✅ Хорошее", "🤔
+Потрепанное"], weights=[10, 60, 30])[0]
+ mult = COND_MULT.get(condition, 1.0)
+ final_price = int(base_price * mult)
+ user["balance"] -= cost
+ user["inventory"].append({"name": base_name, "price": final_price,
+"cond": condition})
+ save_users()
+ bot.send_message(m.chat.id, f"🛍 Ты купил {rarity} телефон: *
+{base_name}*
+Состояние: {condition}
+Оценен для продажи: *
+{final_price:,}$*
+Стоимость покупки: *{cost:,}$*")
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == 'карт')
 def kart_feature(m):
-    user = get_user(m)
-    cost = 100
-    if user["balance"] < cost:
-        return bot.send_message(m.chat.id, "❌ Не хватает 100$ для фишки.")
-    user["balance"] -= cost
-    phrase = random.choice(PHRASES)
-    save_users()
-    bot.send_message(m.chat.id, f"💬 {phrase}\n(Списано {cost:,}$)")
-
+ user = get_user(m)
+ cost = 100
+ if user["balance"] < cost:
+ return bot.send_message(m.chat.id, "❌ Не хватает 100$ для
+фишки.")
+ user["balance"] -= cost
+ phrase = random.choice(PHRASES)
+ save_users()
+ bot.send_message(m.chat.id, f"💬 {phrase}
+(Списано {cost:,}$)")
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == 'тл')
 def my_inventory(m):
-    user = get_user(m)
-    inv = user.get("inventory", [])
-    if not inv:
-        return bot.send_message(m.chat.id, "📱 У тебя нет телефонов на продажу.")
-    msg = f"📱 *Твой склад (LVL {user['lvl']}):*\n\n"
-    for i, item in enumerate(inv, 1):
-        msg += f"{i}. {item['name']} ({item['cond']}) — *{item['price']:,}$*\n"
-    msg += "\nЧтобы продать: `продать [номер]`"
-    bot.send_message(m.chat.id, msg)
+ user = get_user(m)
+ inv = user.get("inventory", [])
+ if not inv:
+ return bot.send_message(m.chat.id, "📱 У тебя нет телефонов на
+продажу.")
+ msg = f"📱 *Твой склад (LVL {user['lvl']}):*
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower().startswith('продать '))
+"
+ for i, item in enumerate(inv, 1):
+ msg += f"{i}. {item['name']} ({item['cond']}) — *
+{item['price']:,}$*
+"
+ msg += "
+Чтобы продать: `продать [номер]`"
+ bot.send_message(m.chat.id, msg)
+@bot.message_handler(func=lambda m: m.text and
+m.text.lower().startswith('продать '))
 def sell_phone(m):
-    user = get_user(m)
-    try:
-        idx = int(m.text.split()[-1]) - 1
-        if idx < 0 or idx >= len(user["inventory"]):
-            raise ValueError
-        item = user["inventory"].pop(idx)
-        user["balance"] += item["price"]
-        lvl_up = add_exp(user, 20)
-        save_users()
-        res = f"🤝 Ты продал {item['name']} за *{item['price']:,}$*\n+20 XP к уровню."
-        if lvl_up:
-            res += "\n\n🏅 *УРОВЕНЬ ПОВЫШЕН! Твой бонус к работе вырос!*"
-        bot.send_message(m.chat.id, res)
-    except:
-        bot.send_message(m.chat.id, "❌ Просто напиши номер телефона из списка `тл`. Например: `продать 1`")
+ user = get_user(m)
+ try:
+ idx = int(m.text.split()[-1]) - 1
+ if idx < 0 or idx >= len(user["inventory"]):
+ raise ValueError
+ item = user["inventory"].pop(idx)
+ user["balance"] += item["price"]
+ lvl_up = add_exp(user, 20)
+ save_users()
+ res = f"🤝 Ты продал {item['name']} за *{item['price']:,}$*
++20
+XP к уровню."
+ if lvl_up:
+ res += "
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == 'профиль')
+🏅 *УРОВЕНЬ ПОВЫШЕН! Твой бонус к работе вырос!*"
+ bot.send_message(m.chat.id, res)
+ except:
+ bot.send_message(m.chat.id, "❌ Просто напиши номер телефона из
+списка `тл`. Например: `продать 1`")
+@bot.message_handler(func=lambda m: m.text and m.text.lower() ==
+'профиль')
 def profile(m):
-    user = get_user(m)
-    msg = (f"👤 *Игрок:* {user['name']}\n"
-           f"💰 *Баланс:* {user['balance']:,}$\n"
-           f"⭐ *Уровень:* {user['lvl']} ({user['exp']} XP)\n"
-           f"📱 *В наличии:* {len(user['inventory'])} шт.")
-    bot.send_message(m.chat.id, msg)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower().startswith('ставка '))
+ user = get_user(m)
+ msg = (f"👤 *Игрок:* {user['name']}
+"
+ f"💰 *Баланс:* {user['balance']:,}$
+"
+ f"⭐ *Уровень:* {user['lvl']} ({user['exp']} XP)
+"
+ f"📱 *В наличии:* {len(user['inventory'])} шт.")
+ bot.send_message(m.chat.id, msg)
+@bot.message_handler(func=lambda m: m.text and
+m.text.lower().startswith('ставка '))
 def casino(m):
-    user = get_user(m)
-    try:
-        amount = int(m.text.split()[-1])
-        if amount <= 0 or amount > user["balance"]:
-            return bot.send_message(m.chat.id, "❌ У тебя нет столько денег или неверная сумма!")
-        # списываем ставку
-        user["balance"] -= amount
-        if random.random() < 0.4:  # 40% на победу
-            user["balance"] += amount * 2  # возвращаем 2x (чистый выигрыш = amount)
-            bot.send_message(m.chat.id, f"📈 Фортуна! Ты выиграл — получил *{amount*2:,}$*")
-        else:
-            bot.send_message(m.chat.id, f"📉 Сделка сорвалась. Ты потерял *{amount:,}$*")
-        save_users()
-    except:
-        bot.send_message(m.chat.id, "❌ Пиши: `ставка 5000`")
-
+ user = get_user(m)
+ try:
+ amount = int(m.text.split()[-1])
+ if amount <= 0 or amount > user["balance"]:
+ return bot.send_message(m.chat.id, "❌ У тебя нет столько
+денег или неверная сумма!")
+ # списываем ставку
+ user["balance"] -= amount
+ if random.random() < 0.4: # 40% на победу
+ user["balance"] += amount * 2 # возвращаем 2x (чистый
+выигрыш = amount)
+ bot.send_message(m.chat.id, f"📈 Фортуна! Ты выиграл —
+получил *{amount*2:,}$*")
+ else:
+ bot.send_message(m.chat.id, f"📉 Сделка сорвалась. Ты потерял
+*{amount:,}$*")
+ save_users()
+ except:
+ bot.send_message(m.chat.id, "❌ Пиши: `ставка 5000`")
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == 'топ')
 def top_players(m):
-    top = sorted(_users.values(), key=lambda x: x['balance'], reverse=True)[:10]
-    res = "🏆 *ТОП 10 БОГАТЫХ ПЕРЕКУПОВ:*\n\n"
-    for i, u in enumerate(top, 1):
-        res += f"{i}. {u['name']} — *{u['balance']:,}$*\n"
-    bot.send_message(m.chat.id, res)
+ top = sorted(_users.values(), key=lambda x: x['balance'],
+reverse=True)[:10]
+ res = "🏆 *ТОП 10 БОГАТЫХ ПЕРЕКУПОВ:*
 
+"
+ for i, u in enumerate(top, 1):
+ res += f"{i}. {u['name']} — *{u['balance']:,}$*
+"
+ bot.send_message(m.chat.id, res)
 # --- Запуск ---
 if __name__ == "__main__":
-    load_users()
-    print("Бот запущен и готов к перепродажам!")
-    bot.infinity_polling()
+ load_users()
+ print("Бот запущен и готов к перепродажам!")
+ bot.infinity_polling()
