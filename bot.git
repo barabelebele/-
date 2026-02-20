@@ -605,6 +605,6 @@ if __name__ == "__main__":
     while True:
         try:
             bot.infinity_polling(skip_pending=True)
-        except Exception as e:
-            logger.exception(f"Polling упал — перезапуск через 15 сек. Ошибка: {e}")
-            time.sleep(15)infinity_polling(skip_p
+        except Exception:
+            logger.exception("Polling упал — перезапуск через 15 сек.")
+            time.sleep(15)
