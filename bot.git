@@ -16,61 +16,231 @@ TOKEN = os.getenv("TG_BOT_TOKEN") or "8109307891:AAHSqQtacU_Ar_1srMJisLqD1eEPEXo
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
 # --- Настройки игры ---
+# КД для флипа (3 часа в секундах)
+FLIP_COOLDOWN = 3 * 60 * 60  # 3 часа
+
+# РАСШИРЕННЫЙ пул телефонов по редкости (50+ моделей)
 PHONES_POOLS = {
     "обычный": [
         ("Nokia 3310", 1500),
-        ("iPhone 11", 30000),
-        ("Xiaomi 14", 80000),
+        ("Siemens A35", 1200),
+        ("Philips Xenium", 1800),
+        ("Redmi 9A", 2000),
+        ("Жека фон (дешёвый)", 500),
+        ("Alcatel OT-101", 800),
+        ("Fly IQ440", 1500),
+        ("LG K11", 1700),
+        ("ZTE Blade A5", 1400),
+        ("HTC Desire 12", 1900),
+        ("Nokia 105", 600),
+        ("Samsung E1200", 400),
+        ("Motorola C117", 300),
+        ("Panasonic GD55", 250),
+        ("Philips S200", 1100),
+        ("Alcatel 1066", 450),
+        ("Redmi 8A", 1900),
+        ("Realme C11", 1800),
+        ("Oppo A15", 2100),
+        ("Vivo Y12", 2000),
+        ("Honor 7A", 1950),
+        ("Lenovo K5", 1850),
+        ("Meizu M5", 1750),
+        ("ASUS ZenFone Live", 1650),
+        ("Micromax Bharat", 800),
     ],
     "необычный": [
-        ("iPhone 13", 55000),
-        ("Pixel 8 Pro", 95000),
-        ("Sony Xperia 1", 90000),
+        ("Xiaomi Redmi Note 10", 8000),
+        ("Samsung A12", 7500),
+        ("Realme C21", 7000),
+        ("Redmi 9A Turbo", 9000),
+        ("Motorola Moto G", 8500),
+        ("Huawei Y6", 7800),
+        ("Nokia 5.3", 8200),
+        ("Xiaomi Redmi 9T", 8200),
+        ("Samsung A22", 8300),
+        ("Realme 7i", 7900),
+        ("Oppo A54", 7700),
+        ("Vivo Y20", 7300),
+        ("Honor 8A", 6800),
+        ("LG K52", 7200),
+        ("Motorola E7", 6900),
+        ("Nokia 3.4", 7100),
+        ("Sony Xperia L4", 7600),
+        ("ASUS ZenFone Max", 7400),
+        ("Google Pixel 4a", 12000),  # Дороговат для необычного, но пусть
+        ("OnePlus Nord N100", 8100),
+        ("Poco M3", 7950),
+        ("Infinix Hot 10", 6500),
+        ("Tecno Spark 7", 6200),
+        ("Blackview A80", 5900),
+        ("Ulefone Note 8", 5500),
     ],
     "редкий": [
-        ("Motorola RAZR", 110000),
-        ("Samsung S24 Ultra", 125000),
+        ("Xiaomi Mi 11", 25000),
+        ("Samsung A52", 24000),
+        ("OnePlus Nord", 26000),
+        ("Redmi Note 11 Pro", 27000),
+        ("Google Pixel 5a", 25500),
+        ("Sony Xperia 10", 23000),
+        ("Xiaomi 11T", 26500),
+        ("Samsung A72", 28000),
+        ("Realme 8 Pro", 24500),
+        ("Oppo Reno 5", 25000),
+        ("Vivo V21", 24000),
+        ("Honor 50", 26000),
+        ("Motorola Edge 20", 27500),
+        ("Nokia X20", 23500),
+        ("LG Velvet", 22500),
+        ("ASUS ZenFone 8", 29000),
+        ("Poco F3", 25500),
+        ("Infinix Zero 8", 19000),
+        ("Tecno Camon 17", 17000),
+        ("Blackview BV7100", 15000),
+        ("Ulefone Power Armor", 18000),
+        ("Doogee S88 Pro", 16500),
+        ("Cubot KingKong", 14500),
+        ("Oukitel WP15", 17500),
+        ("AGM H5", 18500),
     ],
     "эпик": [
-        ("iPhone 15 Pro", 130000),
+        ("iPhone 12", 55000),
+        ("Samsung S21", 58000),
+        ("Xiaomi 12 Pro", 60000),
+        ("OnePlus 10", 59000),
+        ("Asus ROG Phone", 62000),
+        ("iPhone 13 mini", 65000),
+        ("Samsung S22", 63000),
+        ("Xiaomi 12", 56000),
+        ("Google Pixel 6", 57000),
+        ("Sony Xperia 5 III", 61000),
+        ("Motorola Edge 30 Pro", 58500),
+        ("Nokia G50", 35000),  # Чуть дешевле
+        ("LG Wing", 52000),
+        ("ASUS ROG Phone 5", 64000),
+        ("Poco F4 GT", 51000),
+        ("Black Shark 4", 53000),
+        ("Red Magic 6", 54500),
+        ("ZTE Axon 30", 47000),
+        ("Oppo Find X3", 59500),
+        ("Vivo X60 Pro", 56500),
+        ("Honor Magic 3", 60500),
+        ("Realme GT", 54000),
+        ("Meizu 18", 52500),
+        ("Lenovo Legion Duel", 58000),
+        ("Nubia Red Magic", 55000),
     ],
     "легендарный": [
-        ("Custom Ultra", 250000),
+        ("iPhone 15 Pro Max", 140000),
+        ("Samsung S24 Ultra", 135000),
+        ("Андрюшка фон (редкий дорогой)", 200000),
+        ("Custom Titanium Pro", 180000),
+        ("Sony Xperia Pro-I", 150000),
+        ("Google Pixel 8 Pro", 130000),
+        ("iPhone 14 Pro Max", 125000),
+        ("Samsung S23 Ultra", 120000),
+        ("Xiaomi 13 Ultra", 115000),
+        ("OnePlus 11 Pro", 110000),
+        ("ASUS ROG Phone 7", 105000),
+        ("Huawei Mate 60 Pro", 145000),
+        ("Honor Magic 5 Pro", 118000),
+        ("Oppo Find N2", 155000),
+        ("Vivo X90 Pro+", 128000),
+        ("Motorola Razr 2023", 132000),
+        ("Nothing Phone 2", 95000),
+        ("Redmi K60 Pro", 85000),
+        ("Realme GT3", 89000),
+        ("Poco F5 Pro", 82000),
+        ("ZTE Axon 40 Ultra", 98000),
+        ("Nubia Z50 Ultra", 102000),
+        ("Meizu 20 Pro", 88000),
+        ("Lenovo Legion Y90", 92000),
+        ("Black Shark 5 Pro", 86000),
     ],
 }
 
+# Цены на покупку телефонов
 RARITY_PRICES = {
-    "обычный": 5000,
-    "необычный": 12000,
-    "редкий": 35000,
-    "эпик": 80000,
-    "легендарный": 160000,
+    "обычный": 800,
+    "необычный": 2500,
+    "редкий": 8000,
+    "эпик": 20000,
+    "легендарный": 50000,
 }
 
+# Множители состояния
 COND_MULT = {
-    "✨ Идеальное": 1.1,
-    "✅ Хорошее": 0.8,
-    "🤔 Потрепанное": 0.5,
-    "✅ Б/У": 0.3,
+    "✨ Идеальное": 1.3,
+    "✅ Хорошее": 1.0,
+    "🤔 Потрепанное": 0.6,
+    "💩 Убитое": 0.3,
+    "🆕 Новое": 1.5,
+    "📦 Запечатанное": 1.8,      # Новое состояние
+    "🔧 После ремонта": 0.7,      # Новое состояние
+    "💎 Коллекционное": 2.0,      # Новое состояние (редко)
 }
 
-PHONES = [
-    ("iPhone 11", 30000),
-    ("iPhone 13", 55000),
-    ("iPhone 15 Pro", 130000),
+# Все телефоны для кейсов (только бюджетные, максимум 15000)
+CASE_PHONES = [
     ("Nokia 3310", 1500),
-    ("Samsung S24 Ultra", 125000),
-    ("Xiaomi 14", 80000),
-    ("Sony Xperia 1", 90000),
-    ("Motorola RAZR", 110000),
-    ("Pixel 8 Pro", 95000),
+    ("Siemens A35", 1200),
+    ("Philips Xenium", 1800),
+    ("Redmi 9A", 2000),
+    ("Жека фон", 500),
+    ("Alcatel OT-101", 800),
+    ("Fly IQ440", 1500),
+    ("Xiaomi Redmi Note 10", 4000),
+    ("Samsung A12", 3800),
+    ("Realme C21", 3500),
+    ("Motorola Moto G", 4000),
+    ("Huawei Y6", 3900),
+    ("Nokia 5.3", 4100),
+    ("LG K11", 1700),
+    ("ZTE Blade A5", 1400),
+    ("HTC Desire 12", 1900),
+    ("Nokia 105", 600),
+    ("Samsung E1200", 400),
+    ("Motorola C117", 300),
+    ("Panasonic GD55", 250),
+    ("Philips S200", 1100),
+    ("Alcatel 1066", 450),
+    ("Redmi 8A", 1900),
+    ("Realme C11", 1800),
+    ("Oppo A15", 2100),
+    ("Vivo Y12", 2000),
+    ("Honor 7A", 1950),
+    ("Lenovo K5", 1850),
+    ("Meizu M5", 1750),
+    ("ASUS ZenFone Live", 1650),
+    ("Micromax Bharat", 800),
+    ("Xiaomi Redmi 9T", 3200),
+    ("Samsung A22", 3800),
+    ("Realme 7i", 3500),
+    ("Oppo A54", 3400),
+    ("Vivo Y20", 3300),
+    ("Honor 8A", 2900),
+    ("LG K52", 3100),
+    ("Motorola E7", 3000),
+    ("Nokia 3.4", 3200),
+    ("Sony Xperia L4", 3600),
+    ("ASUS ZenFone Max", 3400),
+    ("Poco M3", 3700),
+    ("Infinix Hot 10", 2800),
+    ("Tecno Spark 7", 2600),
+    ("Blackview A80", 2400),
+    ("Ulefone Note 8", 2200),
 ]
 
 PHRASES = [
-    "Удачи",
-    "Везение",
-    "Хорошая сделка",
-    "Отличный лот",
+    "🎰 Флип!",
+    "🔄 Крутим!",
+    "🎲 Удача сегодня с тобой!",
+    "⭐ Джекпот?",
+    "💰 Богатство близко!",
+    "🍀 Везение!",
+    "✨ Магия флипа!",
+    "🎯 В яблочко!",
+    "💫 Фортуна улыбается!",
+    "🔥 Горячий флип!",
 ]
 
 USERS_FILE = "users.json"
@@ -111,7 +281,7 @@ def get_user(m):
     if uid not in _users:
         _users[uid] = {
             "name": m.from_user.first_name or "Перекуп",
-            "balance": 10000,
+            "balance": 5000,
             "inventory": [],
             "last_flip": 0,
             "exp": 0,
@@ -125,7 +295,7 @@ def get_user(m):
 
 def add_exp(user, amount):
     user["exp"] += amount
-    next_lvl = user["lvl"] * 100
+    next_lvl = user["lvl"] * 150
     if user["exp"] >= next_lvl:
         user["lvl"] += 1
         user["exp"] = 0
@@ -133,48 +303,46 @@ def add_exp(user, amount):
     return False
 
 
+def can_flip(user):
+    """Проверяет, прошел ли КД для флипа"""
+    current_time = int(time.time())
+    time_passed = current_time - user["last_flip"]
+    if time_passed >= FLIP_COOLDOWN:
+        return True, 0
+    else:
+        remaining = FLIP_COOLDOWN - time_passed
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
+        return False, f"{hours}ч {minutes}м"
+
+
 # --- Команды бота ---
 
 @bot.message_handler(commands=["start", "help"])
 def start_cmd(m):
     msg = (
-        """📱 *ДОБРО ПОЖАЛОВАТЬ В СИМУЛЯТОР ПЕРЕКУПА!*\n\n"
-        "🤑 *Заработок:*\n"
-        "• `заработать` — пойти на смену в сервис\n"
-        "• `карт` — фишка за 100 с фразой\n"
-        "• `ставка [сумма]` — рискнуть в казино\n\n"
+        "📱 *ДОБРО ПОЖАЛОВАТЬ В СИМУЛЯТОР ПЕРЕКУПА!*\n\n"
+        "🎰 *ФЛИП (ОСНОВНОЙ ЗАРАБОТОК):*\n"
+        "• `карт` или `флип` — крутить флип раз в 3 часа! Выпадает телефон, который можно продать\n\n"
         "🛒 *Магазин / Торговля:*\n"
         "• `магазин` — открыть магазин (купить телефон по редкости или кейс)\n"
         "• `купить телефон [редкость]` — купить телефон выбранной редкости\n"
-        "• `купить кейс` или `купить 1` — открыть кейс (15,000$)\n"
+        "• `купить кейс` или `купить 1` — открыть кейс (5,000$)\n"
         "• `тл` — посмотреть свои телефоны\n"
         "• `продать [номер]` — продать телефон из списка (например: `продать 1`)\n\n"
         "📊 *Прочее:*\n"
         "• `профиль` — твоя статистика\n"
-        "• `топ` — список лучших\n"""
+        "• `топ` — список лучших\n\n"
+        "🎮 *Всего в игре более 50 моделей телефонов!*"
     )
     bot.send_message(m.chat.id, msg)
-
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "заработать")
-def earn_money(m):
-    user = get_user(m)
-    base = random.randint(1000, 3000)
-    bonus = user["lvl"] * 500
-    total = base + bonus
-    user["balance"] += total
-    save_users()
-    bot.send_message(
-        m.chat.id,
-        f"🛠️ Ты починил пару экранов!\nПолучено: *{total:,}$*\n_(Уровень {user['lvl']} дает бонус +{bonus:,}$)_",
-    )
 
 
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == "магазин")
 def open_shop(m):
     msg = "🛒 *МАГАЗИН*\n\nВыберите, что купить:\n"
     msg += "• `купить телефон [редкость]` — доступные редкости: обычный, необычный, редкий, эпик, легендарный\n"
-    msg += "• `купить кейс` — Обычный кейс (random phone) — *15,000$*\n\n"
+    msg += "• `купить кейс` — Обычный кейс (random phone) — *5,000$*\n\n"
     msg += "Цены на покупку телефонов по редкости:\n"
     for r, p in RARITY_PRICES.items():
         msg += f"• *{r.title()}* — *{p:,}$*\n"
@@ -191,13 +359,19 @@ def open_shop(m):
 )
 def buy_case(m):
     user = get_user(m)
-    cost = 15000
+    cost = 5000
     if user["balance"] < cost:
-        return bot.send_message(m.chat.id, "❌ Не хватает денег! Иди заработай.")
-    p_name, p_price = random.choice(PHONES)
-    condition = random.choice(["✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное"])
+        return bot.send_message(m.chat.id, "❌ Не хватает денег! Иди флипай.")
+    
+    p_name, p_price = random.choice(CASE_PHONES)
+    condition = random.choice(["🆕 Новое", "✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное", "💩 Убитое", "🔧 После ремонта"])
     mult = COND_MULT.get(condition, 1.0)
     final_price = int(p_price * mult)
+    
+    # Максимальная цена из кейса - 15000
+    if final_price > 15000:
+        final_price = 15000
+    
     user["balance"] -= cost
     user["inventory"].append({"name": p_name, "price": final_price, "cond": condition})
     save_users()
@@ -218,16 +392,22 @@ def buy_phone(m):
         return bot.send_message(m.chat.id, "❌ Неверная редкость. Доступные: обычный, необычный, редкий, эпик, легендарный")
     cost = RARITY_PRICES[rarity]
     if user["balance"] < cost:
-        return bot.send_message(m.chat.id, f"❌ Для покупки {rarity} телефона нужно {cost:,}$ ( — у тебя {user['balance']:,}$)")
+        return bot.send_message(m.chat.id, f"❌ Для покупки {rarity} телефона нужно {cost:,}$ (у тебя {user['balance']:,}$)")
     pool = PHONES_POOLS.get(rarity, [])
     if not pool:
         return bot.send_message(m.chat.id, "❌ В этой редкости сейчас нет телефонов (ошибка).")
     base_name, base_price = random.choice(pool)
-    condition = random.choices(["✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное"], weights=[10, 60, 30])[0]
+    
+    # Состояния с шансами
+    conditions = ["🆕 Новое", "✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное", "💩 Убитое", "🔧 После ремонта", "💎 Коллекционное"]
+    weights = [5, 15, 40, 25, 5, 8, 2]  # 2% на коллекционное
+    condition = random.choices(conditions, weights=weights)[0]
+    
     mult = COND_MULT.get(condition, 1.0)
     final_price = int(base_price * mult)
     user["balance"] -= cost
     user["inventory"].append({"name": base_name, "price": final_price, "cond": condition})
+    add_exp(user, 10)
     save_users()
     bot.send_message(
         m.chat.id,
@@ -235,16 +415,76 @@ def buy_phone(m):
     )
 
 
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "карт")
-def kart_feature(m):
+@bot.message_handler(func=lambda m: m.text and m.text.lower() in ["карт", "флип"])
+def flip_feature(m):
     user = get_user(m)
-    cost = 100
-    if user["balance"] < cost:
-        return bot.send_message(m.chat.id, "❌ Не хватает 100$ для фишки.")
-    user["balance"] -= cost
-    phrase = random.choice(PHRASES)
+    
+    # Проверка КД
+    can, remaining = can_flip(user)
+    if not can:
+        return bot.send_message(m.chat.id, f"⏳ Флип будет доступен через: *{remaining}*")
+    
+    # Выбор случайной редкости с весами
+    rarities = ["обычный", "необычный", "редкий", "эпик", "легендарный"]
+    weights = [50, 25, 15, 7, 3]
+    chosen_rarity = random.choices(rarities, weights=weights)[0]
+    
+    # Выбор телефона из пула
+    pool = PHONES_POOLS[chosen_rarity]
+    base_name, base_price = random.choice(pool)
+    
+    # Состояния с шансами
+    conditions = ["🆕 Новое", "✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное", "💩 Убитое", "🔧 После ремонта", "📦 Запечатанное", "💎 Коллекционное"]
+    weights = [8, 15, 35, 25, 5, 7, 3, 2]  # 2% на коллекционное, 3% на запечатанное
+    condition = random.choices(conditions, weights=weights)[0]
+    
+    mult = COND_MULT.get(condition, 1.0)
+    final_price = int(base_price * mult)
+    
+    # Добавляем телефон в инвентарь
+    user["inventory"].append({"name": base_name, "price": final_price, "cond": condition})
+    
+    # Обновляем время последнего флипа
+    user["last_flip"] = int(time.time())
+    
+    # Добавляем опыт
+    lvl_up = add_exp(user, 30)
+    
     save_users()
-    bot.send_message(m.chat.id, f"💬 {phrase}\n(Списано {cost:,}$)")
+    
+    # Фразочка
+    phrase = random.choice(PHRASES)
+    
+    msg = (
+        f"{phrase}\n\n"
+        f"📱 Тебе выпал: *{base_name}*\n"
+        f"🏷️ Редкость: *{chosen_rarity.title()}*\n"
+        f"📊 Состояние: {condition}\n"
+        f"💰 Цена: *{final_price:,}$*\n\n"
+        f"✅ Телефон добавлен в инвентарь (`тл`)\n"
+        f"⏳ Следующий флип через 3 часа"
+    )
+    
+    if lvl_up:
+        msg += "\n\n🏆 *УРОВЕНЬ ПОВЫШЕН!*"
+    
+    # Редкое событие - двойной флип (2% шанс)
+    if random.random() < 0.02 and chosen_rarity != "легендарный":
+        time.sleep(1)  # Пауза для эффекта
+        # Второй телефон
+        second_rarity = random.choices(rarities, weights=weights)[0]
+        second_pool = PHONES_POOLS[second_rarity]
+        second_name, second_price = random.choice(second_pool)
+        second_condition = random.choices(conditions, weights=weights)[0]
+        second_mult = COND_MULT.get(second_condition, 1.0)
+        second_final = int(second_price * second_mult)
+        
+        user["inventory"].append({"name": second_name, "price": second_final, "cond": second_condition})
+        save_users()
+        
+        msg += f"\n\n🎊 *БОНУС! ДВОЙНОЙ ФЛИП!*\n📱 +{second_name} ({second_condition}) — *{second_final:,}$*"
+    
+    bot.send_message(m.chat.id, msg)
 
 
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == "тл")
@@ -253,10 +493,18 @@ def my_inventory(m):
     inv = user.get("inventory", [])
     if not inv:
         return bot.send_message(m.chat.id, "📱 У тебя нет телефонов на продажу.")
+    
+    # Сортировка по цене (дорогие сверху)
+    sorted_inv = sorted(inv, key=lambda x: x['price'], reverse=True)
+    
     msg = f"📱 *Твой склад (LVL {user['lvl']}):*\n\n"
-    for i, item in enumerate(inv, 1):
+    total_value = sum(item['price'] for item in inv)
+    
+    for i, item in enumerate(sorted_inv, 1):
         msg += f"{i}. {item['name']} ({item['cond']}) — *{item['price']:,}$*\n"
-    msg += "\nЧтобы продать: `продать [номер]`"
+    
+    msg += f"\n💰 *Общая стоимость:* {total_value:,}$"
+    msg += "\n\nЧтобы продать: `продать [номер]` (нумерация по цене)"
     bot.send_message(m.chat.id, msg)
 
 
@@ -267,13 +515,31 @@ def sell_phone(m):
         idx = int(m.text.split()[-1]) - 1
         if idx < 0 or idx >= len(user["inventory"]):
             raise ValueError
-        item = user["inventory"].pop(idx)
-        user["balance"] += item["price"]
+        
+        # Получаем отсортированный список для соответствия нумерации в тл
+        sorted_inv = sorted(user["inventory"], key=lambda x: x['price'], reverse=True)
+        item_to_sell = sorted_inv[idx]
+        
+        # Находим и удаляем оригинальный элемент из инвентаря
+        for i, item in enumerate(user["inventory"]):
+            if item['name'] == item_to_sell['name'] and item['price'] == item_to_sell['price'] and item['cond'] == item_to_sell['cond']:
+                user["inventory"].pop(i)
+                break
+        
+        user["balance"] += item_to_sell['price']
         lvl_up = add_exp(user, 20)
         save_users()
-        res = f"🤝 Ты продал {item['name']} за *{item['price']:,}$*\n+20\nXP к уровню."
+        
+        # Эффект для редких состояний
+        bonus_text = ""
+        if item_to_sell['cond'] == "💎 Коллекционное":
+            bonus_text = " 🏆 Редкая продажа!"
+        elif item_to_sell['cond'] == "📦 Запечатанное":
+            bonus_text = " 📦 Цена как за новое!"
+        
+        res = f"🤝 Ты продал {item_to_sell['name']} за *{item_to_sell['price']:,}$*{bonus_text}\n+20 XP к уровню."
         if lvl_up:
-            res += "\n\n🏆 *УРОВЕНЬ ПОВЫШЕН! Твой бонус к работе вырос!*"
+            res += "\n\n🏆 *УРОВЕНЬ ПОВЫШЕН! Твой уровень вырос!*"
         bot.send_message(m.chat.id, res)
     except Exception:
         bot.send_message(m.chat.id, "❌ Просто напиши номер телефона из списка `тл`. Например: `продать 1`")
@@ -282,11 +548,20 @@ def sell_phone(m):
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == "профиль")
 def profile(m):
     user = get_user(m)
+    
+    # Расчет времени до следующего флипа
+    can, remaining = can_flip(user)
+    flip_status = "✅ Доступен" if can else f"⏳ Через: {remaining}"
+    
+    # Общая стоимость инвентаря
+    total_value = sum(item['price'] for item in user['inventory'])
+    
     msg = (
         f"👤 *Игрок:* {user['name']}\n"
         f"💰 *Баланс:* {user['balance']:,}$\n"
+        f"📦 *Инвентарь:* {len(user['inventory'])} шт. (💎 {total_value:,}$)\n"
         f"⭐ *Уровень:* {user['lvl']} ({user['exp']} XP)\n"
-        f"📱 *В наличии:* {len(user['inventory'])} шт."
+        f"🎰 *Флип:* {flip_status}"
     )
     bot.send_message(m.chat.id, msg)
 
@@ -300,8 +575,9 @@ def casino(m):
             return bot.send_message(m.chat.id, "❌ У тебя нет столько денег или неверная сумма!")
         user["balance"] -= amount
         if random.random() < 0.4:
-            user["balance"] += amount * 2
-            bot.send_message(m.chat.id, f"📈 Фортуна! Ты выиграл — получил *{amount*2:,}$*")
+            win = amount * 2
+            user["balance"] += win
+            bot.send_message(m.chat.id, f"📈 Фортуна! Ты выиграл — получил *{win:,}$*")
         else:
             bot.send_message(m.chat.id, f"📉 Сделка сорвалась. Ты потерял *{amount:,}$*")
         save_users()
@@ -312,6 +588,18 @@ def casino(m):
 @bot.message_handler(func=lambda m: m.text and m.text.lower() == "топ")
 def top_players(m):
     top = sorted(_users.values(), key=lambda x: x['balance'], reverse=True)[:10]
+    res = "🏅 *ТОП 10 БОГАТЫХ ПЕРЕКУПОВ:*\n\n"
+    for i, u in enumerate(top, 1):
+        # Общая стоимость инвентаря для топ игроков
+        inv_value = sum(item['price'] for item in u.get('inventory', []))
+        total_wealth = u['balance'] + inv_value
+        res += f"{i}. {u['name']} — *{u['balance']:,}$* (💎 {inv_value:,}$) LVL {u['lvl']}\n"
+    bot.send_message(m.chat.id, res)
+
+
+# --- Запуск ---
+if __name__ == "__main__":
+= sorted(_users.values(), key=lambda x: x['balance'], reverse=True)[:10]
     res = "🏅 *ТОП 10 БОГАТЫХ ПЕРЕКУПОВ:*\n\n"
     for i, u in enumerate(top, 1):
         res += f"{i}. {u['name']} — *{u['balance']:,}$*\n"
