@@ -5,7 +5,7 @@ import json
 import os
 import time
 
-TOKEN = "ТВОЙ_ТОКЕН"
+TOKEN = "8001493814:AAED1ABYxQ9b95RCrBrzibfNE2XL613o4U0"
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 ADMIN = "MATERbBOGOV1"
