@@ -1,1068 +1,235 @@
-import os
-import time
-import random
-import json
-import logging
-import tempfile
-from threading import Lock
 import telebot
 from telebot import types
+import random
+import json
+import os
+import time
 
-# --- Настройка логирования ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+TOKEN = "ТВОЙ_ТОКЕН"
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
-# --- ТОКЕН (ЗАМЕНИ НА СВОЙ, ЕСЛИ ЭТОТ НЕ РАБОТАЕТ) ---
-TOKEN = os.getenv("TG_BOT_TOKEN") or "8109307891:AAHSqQtacU_Ar_1srMJisLqD1eEPEXocmls"
-bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
+ADMIN = "MATERbBOGOV1"
+DATA_FILE = "data.json"
 
-# --- АДМИН ---
-ADMIN_USERNAME = "MATERbBOGOV1"
-ADMIN_ID = 123456789  # ← ЗАМЕНИ НА РЕАЛЬНЫЙ ID!
+COOLDOWN = 3 * 60 * 60  # 3 часа
 
-# --- Настройки игры ---
-FLIP_COOLDOWN = 3 * 60 * 60  # 3 часа
+# ================= БАЗА =================
 
-# ==============================================================================
-# ГЕНЕРАЦИЯ ТЕЛЕФОНОВ (СОТНИ ТЫСЯЧ)
-# ==============================================================================
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
+        json.dump({}, f)
 
-BRANDS = [
-    "Samsung", "Apple", "Xiaomi", "Redmi", "Poco", "Realme", "Oppo", "Vivo",
-    "OnePlus", "Google", "Sony", "Nokia", "Motorola", "Huawei", "Honor",
-    "ASUS", "Lenovo", "LG", "HTC", "BlackBerry", "Alcatel", "ZTE", "Meizu",
-    "Tecno", "Infinix", "Micromax", "Lava", "Panasonic", "Philips", "CAT",
-    "Nothing", "Fairphone", "Sharp", "TCL", "Blackview", "Ulefone", "Doogee",
-    "Oukitel", "Cubot", "AGM", "Razer", "RedMagic", "Xperia", "Moto", "Pixel",
-    "Nubia", "iQOO", "Itel", "Wiko", "Gionee", "Vertu", "Energizer", "Emporia",
-    "Doro", "KaiOS", "Microsoft", "NEC", "Mitsubishi", "Sanyo", "Kyocera",
-    "BenQ", "Siemens", "Ericsson", "Black Shark", "Meitu", "Yota", "ZUK"
-]
+def load():
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
 
-MODEL_TYPES = [
-    # Бюджетные
-    "A{}", "Galaxy A{}", "Redmi {}", "Note {}", "Y{}", "C{}", "E{}",
-    "K{}", "L{}", "M{}", "U{}", "V{}", "X{}", "Z{}", "Mi {}",
-    "P{}", "T{}", "S{}", "R{}", "Q{}", "Neo {}", "Lite {}", "Pro {}", "Prime",
-    "Play {}", "Go {}", "Active {}", "Zoom {}", "Mini {}", "Max {}",
-    "Pocket {}", "Star {}", "Magic {}", "Vision {}", "Bold {}", "Advance {}",
-    # Флагманы и средний класс
-    "Galaxy S{}", "Galaxy Note{}", "iPhone {}", "Mi Mix {}", "Mi Max {}",
-    "Find {}", "Reno {}", "Xperia {}", "Xperia X{}", "Moto G{}", "Moto E{}",
-    "Lumia {}", "Desire {}", "Wildfire {}", "Rog {}", "Zenfone {}", "Legion {}",
-    "Edge {}", "One {}", "Nord {}", "8T", "9 Pro", "10 Pro", "11",
-    "Pixel {}", "Pixel XL", "Pixel a{}", "Magic {}", "View {}", "Play {}",
-    "X70", "X80", "X90", "Y70", "Y80", "V25", "V27", "V29",
-    "13T", "14T", "15T", "12 Lite", "13 Lite", "14 Lite",
-    "K50", "K60", "K70", "Poco F{}", "Poco X{}", "Poco M{}",
-    "Realme {} Pro", "Realme GT", "Realme C{}", "Oppo A{}", "Vivo Y{}",
-    "iQOO {}", "Nubia Z{}", "RedMagic {}", "Razer Phone {}", "Black Shark {}",
-    "Mate {}", "P{}", "Pura {}", "Nova {}", "Nova Y{}", "Enjoy {}", "G{}",
-    "Moto Z{}", "Moto X{}", "Moto One {}", "Moto Razr {}", "Moto Edge {}",
-    "Surface Duo {}", "Surface Duo", "Kin {}", "K-Touch {}", "Coolpad {}"
-]
+def save(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-MODIFIERS = ["", " (Global)", " (China)", " (India)", " 5G", " 4G", " Plus", " Ultra", " Max", " Mini", " SE", " FE", " Lite", " Pro Max", " Ultra Max", " Special Edition", " Anniversary Edition", " Carbon Edition", " Matte Black", " White", " Blue", " Purple", " Gold", " Titanium", " (Prototype)", " (Engineer Sample)", " (Display Model)", " (Store Demo)", " (Unreleased)", " (Concept)", " (Refurbished)", " (Export Version)", " (Latin America)", " (EU)", " (Asia)", " (Japan)", " (Korea)", " (USA)"]
+def get_user(user):
+    data = load()
+    uid = str(user.id)
+
+    if uid not in data:
+        data[uid] = {
+            "name": user.first_name,
+            "balance": 5000,
+            "inv": [],
+            "exp": 0,
+            "last_case": 0,
+            "username": user.username
+        }
+        save(data)
+
+    return data
+
+# ================= ТЕЛЕФОНЫ =================
+
+BRANDS = ["Samsung","Apple","Xiaomi","Poco","Realme","Oppo","Vivo","OnePlus","Google","Sony","Nokia","Huawei"]
 
 def generate_phone():
-    """Генерирует случайное название телефона"""
     brand = random.choice(BRANDS)
-    model_type = random.choice(MODEL_TYPES)
-    
-    if "{}" in model_type:
-        if brand == "Apple" and "iPhone" in model_type:
-            number = random.choice([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "SE", "SE 2020", "SE 2022", "X", "XR", "XS", "XS Max", "11 Pro", "11 Pro Max", "12 Pro", "12 Pro Max", "13 Pro", "13 Pro Max", "14 Pro", "14 Pro Max", "15 Pro", "15 Pro Max"])
-        else:
-            number = random.randint(1, 999)
-        base_model = model_type.format(number)
-    else:
-        base_model = model_type
-    
-    modifier = random.choice(MODIFIERS)
-    
-    # Иногда добавляем год выпуска
-    if random.random() < 0.2:
-        year = random.randint(2000, 2026)
-        modifier += f" ({year})"
-    
-    full_name = f"{brand} {base_model}{modifier}"
-    return full_name.strip()
+    model = random.randint(1, 100)
+    return f"{brand} {model}"
 
-RARITY_CONFIG = {
-    "обычный": {"weight": 50, "price_range": (300, 2500), "exp": 10},
-    "необычный": {"weight": 25, "price_range": (2000, 8000), "exp": 15},
-    "редкий": {"weight": 15, "price_range": (7000, 25000), "exp": 20},
-    "эпик": {"weight": 7, "price_range": (20000, 70000), "exp": 30},
-    "легендарный": {"weight": 3, "price_range": (60000, 300000), "exp": 50},
+RARITY = {
+    "Обычный": (300, 1000, 60),
+    "Редкий": (1000, 5000, 25),
+    "Эпик": (5000, 15000, 10),
+    "Легендарный": (15000, 50000, 5)
 }
 
-# Состояния и множители
-CONDITIONS = [
-    ("🆕 Новое", 1.5),
-    ("✨ Идеальное", 1.3),
-    ("✅ Хорошее", 1.0),
-    ("🤔 Потрепанное", 0.6),
-    ("💩 Убитое", 0.3),
-    ("📦 Запечатанное", 1.8),
-    ("🔧 После ремонта", 0.7),
-    ("💎 Коллекционное", 2.0),
-    ("⚡ Разблокированное", 1.1),
-    ("🔒 Залоченное", 0.5),
-    ("🌍 Международная версия", 1.2),
-    ("📸 Кастомная прошивка", 0.9),
-    ("🎮 Игровое издание", 1.4),
-]
-COND_NAMES = [c[0] for c in CONDITIONS]
-COND_MULT = dict(CONDITIONS)
-
-RARITY_PRICES = {
-    "обычный": 800,
-    "необычный": 2500,
-    "редкий": 8000,
-    "эпик": 20000,
-    "легендарный": 50000,
-}
-
-def generate_case_phone():
-    """Генерирует телефон для кейса"""
+def gen_phone():
+    rar = random.choices(list(RARITY.keys()), weights=[v[2] for v in RARITY.values()])[0]
+    price = random.randint(RARITY[rar][0], RARITY[rar][1])
     name = generate_phone()
-    base_price = random.randint(300, 25000)
-    condition = random.choice(COND_NAMES)
-    mult = COND_MULT[condition]
-    final_price = int(base_price * mult)
-    if final_price > 35000:
-        final_price = random.randint(15000, 35000)
-    return name, final_price, condition
+    return {"name": name, "price": price, "rar": rar}
 
-PHRASES = [
-    "🎰 Флип!", "🔄 Крутим!", "🎲 Удача сегодня с тобой!", "⭐ Джекпот?",
-    "💰 Богатство близко!", "🍀 Везение!", "✨ Магия флипа!", "🎯 В яблочко!",
-    "💫 Фортуна улыбается!", "🔥 Горячий флип!", "⚡ Удача на твоей стороне!",
-    "🌈 Радужный флип!", "👑 Королевский флип!", "💎 Бриллиантовый флип!"
-]
+# ================= МЕНЮ =================
 
-USERS_FILE = "users.json"
-lock = Lock()
-_users = {}
+def menu():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("📦 Кейс", "🛒 Магазин")
+    kb.add("👤 Профиль", "🏆 Топ")
+    return kb
 
-# --- Временные данные для админ-панели ---
-admin_states = {}  # {user_id: {"action": "...", "data": {...}}}
+# ================= СТАРТ =================
 
-# --- Система сохранения/загрузки ---
+@bot.message_handler(commands=["start"])
+def start(m):
+    get_user(m.from_user)
+    bot.send_message(m.chat.id, "🔥 Бот перепродажи телефонов", reply_markup=menu())
 
-def load_users():
-    global _users
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, "r", encoding="utf-8") as f:
-                _users = json.load(f)
-            logger.info(f"База данных игроков загружена. Всего: {len(_users)}")
-        except Exception as e:
-            logger.error(f"Ошибка чтения базы: {e}")
-            _users = {}
-    else:
-        _users = {}
-        save_users()
+# ================= КЕЙС =================
 
-def save_users():
-    with lock:
-        try:
-            dirn = os.path.dirname(os.path.abspath(USERS_FILE)) or "."
-            fd, tmp_path = tempfile.mkstemp(dir=dirn)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(_users, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, USERS_FILE)
-            logger.info("База данных сохранена")
-        except Exception as e:
-            logger.error(f"Ошибка сохранения базы: {e}")
-
-def get_user(m):
+@bot.message_handler(func=lambda m: m.text == "📦 Кейс")
+def case(m):
+    data = load()
     uid = str(m.from_user.id)
-    if uid not in _users:
-        _users[uid] = {
-            "name": m.from_user.first_name or "Перекуп",
-            "balance": 5000,
-            "inventory": [],
-            "last_flip": 0,
-            "exp": 0,
-            "lvl": 1,
-            "username": m.from_user.username
-        }
-        save_users()
-    else:
-        if m.from_user.username:
-            _users[uid]['username'] = m.from_user.username
-    return _users[uid]
+    user = data[uid]
 
-def get_user_by_id(user_id):
-    uid = str(user_id)
-    return _users.get(uid)
+    now = time.time()
+    if now - user["last_case"] < COOLDOWN:
+        left = int(COOLDOWN - (now - user["last_case"]))
+        h = left // 3600
+        mnt = (left % 3600) // 60
+        return bot.send_message(m.chat.id, f"⏳ Подожди {h}ч {mnt}м")
 
-# --- ПРОВЕРКА АДМИНА ---
+    phone = gen_phone()
+    user["inv"].append(phone)
+    user["exp"] += 10
+    user["last_case"] = now
 
-def is_admin(user_id, username=None):
-    if user_id == ADMIN_ID:
-        return True
-    if username and username.lower() == ADMIN_USERNAME.lower():
-        return True
-    return False
+    save(data)
 
-# --- СОХРАНЕНИЕ/ЗАГРУЗКА ПРОГРЕССА (ИСПРАВЛЕНО) ---
-
-def export_user_data(user_id):
-    """Экспортирует данные пользователя в строку JSON"""
-    uid = str(user_id)
-    if uid in _users:
-        data = _users[uid].copy()
-        data['_export_version'] = '2.0'
-        data['_export_date'] = time.time()
-        return json.dumps(data, ensure_ascii=False, indent=2)
-    return None
-
-def import_user_data(user_id, json_data):
-    """Импортирует данные пользователя из строки JSON"""
-    try:
-        new_data = json.loads(json_data)
-        required_fields = ['name', 'balance', 'inventory', 'last_flip', 'exp', 'lvl']
-        for field in required_fields:
-            if field not in new_data:
-                return False, f"Отсутствует поле {field}"
-        
-        for item in new_data.get('inventory', []):
-            if not all(k in item for k in ['name', 'price', 'cond']):
-                return False, "Неверный формат инвентаря"
-        
-        _users[str(user_id)] = new_data
-        save_users()
-        return True, "Успешно загружено!"
-    except json.JSONDecodeError:
-        return False, "Неверный формат JSON"
-    except Exception as e:
-        return False, f"Ошибка: {str(e)}"
-
-# --- АДМИН-ПАНЕЛЬ (ПОЛНОСТЬЮ ПЕРЕРАБОТАНА) ---
-
-@bot.message_handler(commands=["adminpanel"])
-def admin_panel(m):
-    user_id = m.from_user.id
-    username = m.from_user.username
-    
-    if not is_admin(user_id, username):
-        return bot.send_message(m.chat.id, "❌ Эта команда только для @MATERbBOGOV1!")
-    
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    btn1 = types.InlineKeyboardButton("📁 Сохранить прогресс", callback_data="admin_save")
-    btn2 = types.InlineKeyboardButton("📂 Загрузить прогресс", callback_data="admin_load")
-    btn3 = types.InlineKeyboardButton("⏱️ Сбросить КД", callback_data="admin_reset_cd")
-    btn4 = types.InlineKeyboardButton("💰 Выдать деньги", callback_data="admin_add_money")
-    btn5 = types.InlineKeyboardButton("📱 Выдать телефон", callback_data="admin_add_phone")
-    btn6 = types.InlineKeyboardButton("🔍 Инфо о игроке", callback_data="admin_player_info")
-    btn7 = types.InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")
-    btn8 = types.InlineKeyboardButton("💾 Бекап базы", callback_data="admin_backup")
-    btn9 = types.InlineKeyboardButton("🔄 Перезапустить админку", callback_data="admin_refresh")
-    markup.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8, btn9)
-    
-    bot.send_message(
-        m.chat.id,
-        "👑 *АДМИН-ПАНЕЛЬ*\n\nВыберите действие:",
-        reply_markup=markup
+    bot.send_message(m.chat.id,
+        f"🎉 Выпал телефон!\n"
+        f"<b>{phone['name']}</b>\n"
+        f"💰 {phone['price']}$\n"
+        f"✨ {phone['rar']}"
     )
 
-@bot.callback_query_handler(func=lambda call: True)
-def admin_callback(call):
-    """Единый обработчик для всех callback"""
-    user_id = call.from_user.id
-    username = call.from_user.username
-    data = call.data
-    
-    # Проверка админа для всех админских действий
-    if data.startswith("admin_"):
-        if not is_admin(user_id, username):
-            bot.answer_callback_query(call.id, "❌ Только для админа!", show_alert=True)
-            return
-        
-        # Подтверждаем получение callback
-        bot.answer_callback_query(call.id)
-        
-        # Обработка действий
-        if data == "admin_save":
-            save_progress_command(call.message)
-        elif data == "admin_load":
-            load_progress_command(call.message)
-        elif data == "admin_reset_cd":
-            msg = bot.send_message(
-                call.message.chat.id,
-                "⏱️ Введи **ID или @username** игрока:"
-            )
-            admin_states[user_id] = {"action": "reset_cd"}
-            bot.register_next_step_handler(msg, process_admin_reset_cd)
-        elif data == "admin_add_money":
-            msg = bot.send_message(
-                call.message.chat.id,
-                "💰 Введи **ID или @username** и сумму через пробел\nПример: `@user 10000`"
-            )
-            admin_states[user_id] = {"action": "add_money"}
-            bot.register_next_step_handler(msg, process_admin_add_money)
-        elif data == "admin_add_phone":
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            for rarity in RARITY_CONFIG.keys():
-                btn = types.InlineKeyboardButton(rarity.title(), callback_data=f"addphone_{rarity}")
-                markup.add(btn)
-            bot.send_message(
-                call.message.chat.id,
-                "📱 Выбери редкость:",
-                reply_markup=markup
-            )
-        elif data == "admin_player_info":
-            msg = bot.send_message(
-                call.message.chat.id,
-                "🔍 Введи **ID** или **@username**:"
-            )
-            admin_states[user_id] = {"action": "player_info"}
-            bot.register_next_step_handler(msg, process_admin_player_info)
-        elif data == "admin_stats":
-            show_bot_stats(call.message)
-        elif data == "admin_backup":
-            create_backup(call.message)
-        elif data == "admin_refresh":
-            admin_panel(call.message)
-    
-    # Обработка выбора редкости для выдачи телефона
-    elif data.startswith("addphone_"):
-        if not is_admin(user_id, username):
-            bot.answer_callback_query(call.id, "❌ Только для админа!", show_alert=True)
-            return
-        
-        bot.answer_callback_query(call.id)
-        rarity = data.replace("addphone_", "")
-        admin_states[user_id] = {"action": "add_phone", "rarity": rarity}
-        
-        # Создаем клавиатуру с состояниями
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        for cond in COND_NAMES[:8]:  # Первые 8 состояний
-            btn = types.InlineKeyboardButton(cond, callback_data=f"phonecond_{cond}")
-            markup.add(btn)
-        
-        bot.send_message(
-            call.message.chat.id,
-            f"📱 Редкость: *{rarity.title()}*\n\nВыбери состояние:",
-            reply_markup=markup
-        )
-    
-    # Обработка выбора состояния для выдачи телефона
-    elif data.startswith("phonecond_"):
-        if not is_admin(user_id, username):
-            bot.answer_callback_query(call.id, "❌ Только для админа!", show_alert=True)
-            return
-        
-        bot.answer_callback_query(call.id)
-        condition = data.replace("phonecond_", "")
-        
-        if user_id in admin_states and admin_states[user_id].get("action") == "add_phone":
-            msg = bot.send_message(
-                call.message.chat.id,
-                f"📱 Редкость: *{admin_states[user_id]['rarity'].title()}*\n📊 Состояние: *{condition}*\n\nВведи **ID или @username** игрока:"
-            )
-            admin_states[user_id]["condition"] = condition
-            bot.register_next_step_handler(msg, process_admin_add_phone_final)
+# ================= ПРОФИЛЬ =================
 
-# --- ОБРАБОТЧИКИ АДМИН-КОМАНД (УЛУЧШЕНЫ) ---
+@bot.message_handler(func=lambda m: m.text == "👤 Профиль")
+def profile(m):
+    data = load()
+    u = data[str(m.from_user.id)]
 
-def process_admin_reset_cd(m):
-    user_id = m.from_user.id
-    input_text = m.text.strip()
-    
-    target_id = None
-    
-    if input_text.startswith('@'):
-        username = input_text[1:].lower()
-        for uid, data in _users.items():
-            if data.get('username', '').lower() == username:
-                target_id = uid
-                break
-    else:
-        if input_text.isdigit():
-            target_id = input_text
-    
-    if not target_id or target_id not in _users:
-        bot.send_message(m.chat.id, "❌ Игрок не найден!")
-        if user_id in admin_states:
-            del admin_states[user_id]
-        return
-    
-    _users[target_id]['last_flip'] = 0
-    save_users()
-    
-    player_name = _users[target_id]['name']
-    bot.send_message(
-        m.chat.id,
-        f"✅ КД флипа для *{player_name}* сброшен!\nОн может использовать `флип`"
+    total = sum(i["price"] for i in u["inv"])
+
+    bot.send_message(m.chat.id,
+        f"👤 {u['name']}\n"
+        f"💰 {u['balance']}$\n"
+        f"📦 {len(u['inv'])} телефонов\n"
+        f"💎 {total}$\n"
+        f"⭐ XP: {u['exp']}"
     )
-    
-    if user_id in admin_states:
-        del admin_states[user_id]
 
-def process_admin_add_money(m):
-    user_id = m.from_user.id
-    input_text = m.text.strip()
-    parts = input_text.split()
-    
-    if len(parts) != 2:
-        bot.send_message(m.chat.id, "❌ Неверный формат! Нужно: `@username сумма` или `ID сумма`")
-        if user_id in admin_states:
-            del admin_states[user_id]
-        return
-    
-    target_input, amount_str = parts
-    
-    target_id = None
-    if target_input.startswith('@'):
-        username = target_input[1:].lower()
-        for uid, data in _users.items():
-            if data.get('username', '').lower() == username:
-                target_id = uid
-                break
-    else:
-        if target_input.isdigit():
-            target_id = target_input
-    
-    if not target_id or target_id not in _users:
-        bot.send_message(m.chat.id, "❌ Игрок не найден!")
-        if user_id in admin_states:
-            del admin_states[user_id]
-        return
-    
+# ================= ТОП =================
+
+@bot.message_handler(func=lambda m: m.text == "🏆 Топ")
+def top(m):
+    data = load()
+    users = sorted(data.values(), key=lambda x: x["balance"], reverse=True)[:10]
+
+    text = "🏆 ТОП:\n\n"
+    for i, u in enumerate(users, 1):
+        text += f"{i}. {u['name']} — {u['balance']}$\n"
+
+    bot.send_message(m.chat.id, text)
+
+# ================= МАГАЗИН =================
+
+@bot.message_handler(func=lambda m: m.text == "🛒 Магазин")
+def shop(m):
+    kb = types.InlineKeyboardMarkup()
+    for r in RARITY:
+        kb.add(types.InlineKeyboardButton(r, callback_data=f"buy_{r}"))
+    bot.send_message(m.chat.id, "Выбери редкость:", reply_markup=kb)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("buy_"))
+def buy(c):
+    rar = c.data.split("_")[1]
+    msg = bot.send_message(c.message.chat.id, "Сколько купить?")
+    bot.register_next_step_handler(msg, process_buy, rar)
+
+def process_buy(m, rar):
+    data = load()
+    uid = str(m.from_user.id)
+
     try:
-        amount = int(amount_str)
-        if amount <= 0 or amount > 10_000_000:
-            raise ValueError
+        count = int(m.text)
     except:
-        bot.send_message(m.chat.id, "❌ Сумма должна быть от 1 до 10,000,000!")
-        if user_id in admin_states:
-            del admin_states[user_id]
+        return bot.send_message(m.chat.id, "❌ Число введи")
+
+    price = RARITY[rar][0] * count
+
+    if data[uid]["balance"] < price:
+        return bot.send_message(m.chat.id, "❌ Нет денег")
+
+    for _ in range(count):
+        data[uid]["inv"].append(gen_phone())
+
+    data[uid]["balance"] -= price
+    save(data)
+
+    bot.send_message(m.chat.id, f"✅ Купил {count} шт")
+
+# ================= АДМИН =================
+
+@bot.message_handler(commands=["admin"])
+def admin(m):
+    if m.from_user.username != ADMIN:
         return
-    
-    _users[target_id]['balance'] += amount
-    save_users()
-    
-    player_name = _users[target_id]['name']
-    bot.send_message(
-        m.chat.id,
-        f"✅ Игроку *{player_name}* выдано *{amount:,}$*\nНовый баланс: *{_users[target_id]['balance']:,}$*"
-    )
-    
-    if user_id in admin_states:
-        del admin_states[user_id]
 
-def process_admin_add_phone_final(m):
-    user_id = m.from_user.id
-    target_input = m.text.strip()
-    
-    if user_id not in admin_states or admin_states[user_id].get("action") != "add_phone":
-        bot.send_message(m.chat.id, "❌ Сессия истекла. Начни заново через /adminpanel")
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton("💰 Деньги", callback_data="add_money"))
+    kb.add(types.InlineKeyboardButton("⏱ Сброс КД", callback_data="reset_cd"))
+    kb.add(types.InlineKeyboardButton("📱 Выдать телефон", callback_data="give_phone"))
+
+    bot.send_message(m.chat.id, "👑 Админка", reply_markup=kb)
+
+@bot.callback_query_handler(func=lambda c: True)
+def admin_cb(c):
+    if c.from_user.username != ADMIN:
         return
-    
-    rarity = admin_states[user_id]['rarity']
-    condition = admin_states[user_id]['condition']
-    
-    target_id = None
-    if target_input.startswith('@'):
-        username = target_input[1:].lower()
-        for uid, data in _users.items():
-            if data.get('username', '').lower() == username:
-                target_id = uid
-                break
-    else:
-        if target_input.isdigit():
-            target_id = target_input
-    
-    if not target_id or target_id not in _users:
-        bot.send_message(m.chat.id, "❌ Игрок не найден!")
-        del admin_states[user_id]
-        return
-    
-    # Генерируем телефон
-    phone_name = generate_phone()
-    price_range = RARITY_CONFIG[rarity]["price_range"]
-    base_price = random.randint(price_range[0], price_range[1])
-    mult = COND_MULT.get(condition, 1.0)
-    final_price = int(base_price * mult)
-    
-    _users[target_id]['inventory'].append({
-        "name": phone_name,
-        "price": final_price,
-        "cond": condition
-    })
-    save_users()
-    
-    player_name = _users[target_id]['name']
-    bot.send_message(
-        m.chat.id,
-        f"✅ Игроку *{player_name}* выдан телефон:\n"
-        f"📱 *{phone_name}*\n"
-        f"🏷️ Редкость: {rarity.title()}\n"
-        f"📊 Состояние: {condition}\n"
-        f"💰 Цена: *{final_price:,}$*"
-    )
-    
-    del admin_states[user_id]
 
-def process_admin_player_info(m):
-    user_id = m.from_user.id
-    input_text = m.text.strip()
-    
-    target_id = None
-    if input_text.startswith('@'):
-        username = input_text[1:].lower()
-        for uid, data in _users.items():
-            if data.get('username', '').lower() == username:
-                target_id = uid
-                break
-    else:
-        if input_text.isdigit():
-            target_id = input_text
-    
-    if not target_id or target_id not in _users:
-        bot.send_message(m.chat.id, "❌ Игрок не найден!")
-        if user_id in admin_states:
-            del admin_states[user_id]
-        return
-    
-    player = _users[target_id]
-    
-    current_time = int(time.time())
-    time_passed = current_time - player.get('last_flip', 0)
-    
-    if time_passed >= FLIP_COOLDOWN:
-        flip_status = "✅ Доступен"
-    else:
-        remaining = FLIP_COOLDOWN - time_passed
-        hours = remaining // 3600
-        minutes = (remaining % 3600) // 60
-        flip_status = f"⏳ Через {hours}ч {minutes}м"
-    
-    inv_value = sum(item['price'] for item in player.get('inventory', []))
-    
-        top_phones = sorted(player.get('inventory', []), key=lambda x: x['price'], reverse=True)[:5]
-    phones_text = ""
-    if top_phones:
-        for i, phone in enumerate(top_phones, 1):
-            # Обрезаем длинные названия
-            short_name = phone['name'][:30] + "..." if len(phone['name']) > 30 else phone['name']
-            phones_text += f"{i}. {short_name} ({phone['cond']}) — *{phone['price']:,}$*\n"
-    else:
-        phones_text = "Нет телефонов"
-    
-    msg = (
-        f"👤 *ИНФО О ИГРОКЕ*\n\n"
-        f"🆔 ID: `{target_id}`\n"
-        f"📛 Имя: {player['name']}\n"
-        f"🏷️ Username: @{player.get('username', 'нет')}\n\n"
-        f"💰 Баланс: *{player['balance']:,}$*\n"
-        f"📱 Телефонов: {len(player.get('inventory', []))} (💎 {inv_value:,}$)\n"
-        f"⭐ Уровень: {player['lvl']} ({player['exp']}/{(player['lvl'] * 150)} XP)\n"
-        f"🎰 Флип: {flip_status}\n\n"
-        f"🏆 *Топ телефонов:*\n{phones_text}"
-    )
-    
-    bot.send_message(m.chat.id, msg)
-    
-    if user_id in admin_states:
-        del admin_states[user_id]
+    if c.data == "add_money":
+        msg = bot.send_message(c.message.chat.id, "ID СУММА")
+        bot.register_next_step_handler(msg, add_money)
 
-def show_bot_stats(m):
-    total_players = len(_users)
-    total_balance = sum(u['balance'] for u in _users.values())
-    total_phones = sum(len(u.get('inventory', [])) for u in _users.values())
-    
-    top_players = sorted(_users.values(), key=lambda x: x['balance'], reverse=True)[:5]
-    top_text = ""
-    for i, p in enumerate(top_players, 1):
-        top_text += f"{i}. {p['name']} — *{p['balance']:,}$* (📱 {len(p.get('inventory', []))})\n"
-    
-    msg = (
-        f"📊 *СТАТИСТИКА БОТА*\n\n"
-        f"👥 Всего игроков: *{total_players}*\n"
-        f"💰 Общий баланс: *{total_balance:,}$*\n"
-        f"📱 Всего телефонов: *{total_phones}*\n\n"
-        f"🏆 *Топ 5 богатых:*\n{top_text}"
-    )
-    
-    bot.send_message(m.chat.id, msg)
+    elif c.data == "reset_cd":
+        msg = bot.send_message(c.message.chat.id, "ID игрока")
+        bot.register_next_step_handler(msg, reset_cd)
 
-def create_backup(m):
-    filename = f"backup_{int(time.time())}.json"
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(_users, f, ensure_ascii=False, indent=2)
-    
-    with open(filename, 'rb') as f:
-        bot.send_document(m.chat.id, f, caption="💾 Бекап базы данных")
-    
-    os.remove(filename)
+    elif c.data == "give_phone":
+        msg = bot.send_message(c.message.chat.id, "ID игрока")
+        bot.register_next_step_handler(msg, give_phone)
 
-# --- СОХРАНЕНИЕ/ЗАГРУЗКА ПРОГРЕССА ---
+def add_money(m):
+    data = load()
+    uid, amount = m.text.split()
+    data[uid]["balance"] += int(amount)
+    save(data)
+    bot.send_message(m.chat.id, "✅ Выдано")
 
-def save_progress_command(m):
-    """Отправляет файл с сохранением"""
-    user_id = m.from_user.id
-    json_data = export_user_data(user_id)
-    
-    if not json_data:
-        bot.send_message(m.chat.id, "❌ Не удалось создать сохранение")
-        return
-    
-    # Используем временный файл с правильным именем
-    filename = f"save_{user_id}_{int(time.time())}.txt"
-    filepath = os.path.join(tempfile.gettempdir(), filename)
-    
-    try:
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(json_data)
-        
-        with open(filepath, 'rb') as f:
-            bot.send_document(
-                m.chat.id,
-                f,
-                caption="📁 Твоё сохранение игры\nСохрани этот файл, чтобы потом загрузить прогресс."
-            )
-        
-        os.remove(filepath)
-        logger.info(f"Сохранение отправлено пользователю {user_id}")
-    except Exception as e:
-        logger.error(f"Ошибка при сохранении: {e}")
-        bot.send_message(m.chat.id, f"❌ Ошибка при создании файла: {str(e)}")
+def reset_cd(m):
+    data = load()
+    uid = m.text
+    data[uid]["last_case"] = 0
+    save(data)
+    bot.send_message(m.chat.id, "✅ КД сброшен")
 
-def load_progress_command(m):
-    """Запрашивает файл для загрузки"""
-    msg = bot.send_message(
-        m.chat.id,
-        "📤 Отправь мне файл .txt с сохранением\n\n"
-        "⚠️ *Внимание!* Это полностью заменит твой текущий прогресс!"
-    )
-    bot.register_next_step_handler(msg, process_load_file)
+def give_phone(m):
+    data = load()
+    uid = m.text
+    phone = gen_phone()
+    data[uid]["inv"].append(phone)
+    save(data)
+    bot.send_message(m.chat.id, f"📱 Выдан {phone['name']}")
 
-def process_load_file(m):
-    """Обрабатывает загруженный файл"""
-    if not m.document:
-        bot.send_message(m.chat.id, "❌ Это не файл. Отправь .txt файл")
-        return
-    
-    if not m.document.file_name.endswith('.txt'):
-        bot.send_message(m.chat.id, "❌ Нужен .txt файл")
-        return
-    
-    try:
-        file_info = bot.get_file(m.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        json_data = downloaded_file.decode('utf-8')
-        
-        success, message = import_user_data(m.from_user.id, json_data)
-        
-        if success:
-            user = get_user(m)
-            bot.send_message(
-                m.chat.id,
-                f"✅ *Прогресс загружен!*\n\n"
-                f"👤 Игрок: {user['name']}\n"
-                f"💰 Баланс: {user['balance']:,}$\n"
-                f"📱 Телефонов: {len(user['inventory'])}\n"
-                f"⭐ Уровень: {user['lvl']}"
-            )
-            logger.info(f"Прогресс загружен для пользователя {m.from_user.id}")
-        else:
-            bot.send_message(m.chat.id, f"❌ Ошибка: {message}")
-            
-    except Exception as e:
-        logger.error(f"Ошибка загрузки файла: {e}")
-        bot.send_message(m.chat.id, f"❌ Ошибка: {str(e)}")
+# ================= ЗАПУСК =================
 
-# ========================== ИГРОВЫЕ КОМАНДЫ ==========================
-
-@bot.message_handler(commands=["start", "help"])
-def start_cmd(m):
-    get_user(m)  # Регистрируем пользователя
-    
-    is_admin_user = is_admin(m.from_user.id, m.from_user.username)
-    admin_text = ""
-    if is_admin_user:
-        admin_text = "\n👑 *АДМИН ПАНЕЛЬ:* `/adminpanel`\n"
-    
-    # Создаем клавиатуру с кнопками
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("🎰 Флип", callback_data="game_flip"),
-        types.InlineKeyboardButton("🛒 Магазин", callback_data="game_shop"),
-        types.InlineKeyboardButton("📱 Инвентарь", callback_data="game_inventory"),
-        types.InlineKeyboardButton("👤 Профиль", callback_data="game_profile"),
-        types.InlineKeyboardButton("🏆 Топ", callback_data="game_top"),
-        types.InlineKeyboardButton("📁 Сейв", callback_data="game_save")
-    )
-    
-    msg = (
-        "📱 *ДОБРО ПОЖАЛОВАТЬ В СИМУЛЯТОР ПЕРЕКУПА!*\n"
-        f"{admin_text}\n"
-        "🎰 *ФЛИП:* раз в 3 часа\n"
-        "🛒 *МАГАЗИН:* покупай телефоны и кейсы\n"
-        "💰 *ПРОДАВАЙ:* команда `продать [номер]`\n\n"
-        "🎮 *Более 100.000 уникальных моделей!*"
-    )
-    bot.send_message(m.chat.id, msg, reply_markup=markup)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "магазин")
-def shop_text(m):
-    show_shop_menu(m.chat.id)
-
-def show_shop_menu(chat_id):
-    """Показывает магазин с кнопками"""
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton(f"📱 Обычный (800$)", callback_data="buy_обычный"),
-        types.InlineKeyboardButton(f"📱 Необычный (2500$)", callback_data="buy_необычный"),
-        types.InlineKeyboardButton(f"📱 Редкий (8000$)", callback_data="buy_редкий"),
-        types.InlineKeyboardButton(f"📱 Эпик (20000$)", callback_data="buy_эпик"),
-        types.InlineKeyboardButton(f"📱 Легендарный (50000$)", callback_data="buy_легендарный"),
-        types.InlineKeyboardButton(f"🎁 Кейс (5000$)", callback_data="buy_case"),
-        types.InlineKeyboardButton("◀ Назад в меню", callback_data="back_to_main")
-    )
-    
-    bot.send_message(
-        chat_id,
-        "🛒 *МАГАЗИН ТЕЛЕФОНОВ*\n\n"
-        "Выбери товар для покупки:",
-        reply_markup=markup
-    )
-
-# --- ОБРАБОТЧИК ИГРОВЫХ CALLBACK ---
-@bot.callback_query_handler(func=lambda call: True)
-def game_callback(call):
-    """Единый обработчик для всех игровых callback"""
-    user_id = call.from_user.id
-    data = call.data
-    
-    # Админские callback уже обрабатываются в admin_callback
-    if data.startswith("admin_"):
-        return
-    
-    # Подтверждаем получение
-    bot.answer_callback_query(call.id)
-    
-    # Обработка игровых действий
-    if data == "game_flip":
-        simulate_flip(call.message)
-    elif data == "game_shop":
-        show_shop_menu(call.message.chat.id)
-    elif data == "game_inventory":
-        show_inventory(call.message)
-    elif data == "game_profile":
-        show_profile(call.message)
-    elif data == "game_top":
-        show_top(call.message)
-    elif data == "game_save":
-        save_progress_command(call.message)
-    elif data == "back_to_main":
-        start_cmd(call.message)
-    elif data.startswith("buy_"):
-        process_buy(call.message, data.replace("buy_", ""))
-    elif data.startswith("sell_"):
-        try:
-            idx = int(data.replace("sell_", ""))
-            process_sell_by_idx(call.message, idx)
-        except:
-            pass
-    elif data.startswith("inv_page_"):
-        page = int(data.replace("inv_page_", ""))
-        show_inventory(call.message, page)
-
-def simulate_flip(m):
-    """Обрабатывает флип"""
-    user = get_user(m)
-    
-    can, remaining = can_flip(user)
-    if not can:
-        bot.send_message(m.chat.id, f"⏳ Флип через: *{remaining}*")
-        return
-    
-    # Выбираем редкость
-    rarities = list(RARITY_CONFIG.keys())
-    weights = [RARITY_CONFIG[r]["weight"] for r in rarities]
-    chosen_rarity = random.choices(rarities, weights=weights)[0]
-    
-    # Генерируем телефон
-    phone_name = generate_phone()
-    price_range = RARITY_CONFIG[chosen_rarity]["price_range"]
-    base_price = random.randint(price_range[0], price_range[1])
-    
-    condition = random.choice(COND_NAMES)
-    mult = COND_MULT[condition]
-    final_price = int(base_price * mult)
-    
-    user["inventory"].append({
-        "name": phone_name,
-        "price": final_price,
-        "cond": condition
-    })
-    user["last_flip"] = int(time.time())
-    lvl_up = add_exp(user, RARITY_CONFIG[chosen_rarity]["exp"])
-    save_users()
-    
-    phrase = random.choice(PHRASES)
-    msg = (
-        f"{phrase}\n\n"
-        f"📱 *{phone_name}*\n"
-        f"🏷️ Редкость: {chosen_rarity.title()}\n"
-        f"📊 {condition}\n"
-        f"💰 *{final_price:,}$*\n\n"
-        f"✅ Добавлен в инвентарь"
-    )
-    
-    if lvl_up:
-        msg += "\n\n🏆 *УРОВЕНЬ ПОВЫШЕН!*"
-    
-    # Шанс на двойной флип (2%)
-    if random.random() < 0.02:
-        time.sleep(1)
-        second_rarity = random.choices(rarities, weights=weights)[0]
-        second_name = generate_phone()
-        second_range = RARITY_CONFIG[second_rarity]["price_range"]
-        second_base = random.randint(second_range[0], second_range[1])
-        second_cond = random.choice(COND_NAMES)
-        second_mult = COND_MULT[second_cond]
-        second_final = int(second_base * second_mult)
-        
-        user["inventory"].append({
-            "name": second_name,
-            "price": second_final,
-            "cond": second_cond
-        })
-        save_users()
-        msg += f"\n\n🎊 *ДВОЙНОЙ ФЛИП!*\n📱 +{second_name} ({second_cond}) — *{second_final:,}$*"
-    
-    bot.send_message(m.chat.id, msg)
-
-def process_buy(m, item):
-    """Обрабатывает покупку"""
-    user = get_user(m)
-    
-    if item == "case":
-        cost = 5000
-        if user["balance"] < cost:
-            bot.send_message(m.chat.id, f"❌ Нужно {cost:,}$")
-            return
-        
-        name, final_price, condition = generate_case_phone()
-        
-        user["balance"] -= cost
-        user["inventory"].append({
-            "name": name,
-            "price": final_price,
-            "cond": condition
-        })
-        add_exp(user, 15)
-        save_users()
-        
-        bot.send_message(
-            m.chat.id,
-            f"🎁 *Кейс*\n📱 *{name}*\n{condition}\n💰 *{final_price:,}$*"
-        )
-        return
-    
-    if item in RARITY_CONFIG:
-        cost = RARITY_PRICES[item]
-        if user["balance"] < cost:
-            bot.send_message(m.chat.id, f"❌ Нужно {cost:,}$")
-            return
-        
-        phone_name = generate_phone()
-        price_range = RARITY_CONFIG[item]["price_range"]
-        base_price = random.randint(price_range[0], price_range[1])
-        
-        # Для магазина ограничим состояния
-        available_conds = ["🆕 Новое", "✨ Идеальное", "✅ Хорошее", "🤔 Потрепанное"]
-        weights = [5, 15, 60, 20]
-        condition = random.choices(available_conds, weights=weights)[0]
-        
-        mult = COND_MULT[condition]
-        final_price = int(base_price * mult)
-        
-        user["balance"] -= cost
-        user["inventory"].append({
-            "name": phone_name,
-            "price": final_price,
-            "cond": condition
-        })
-        add_exp(user, RARITY_CONFIG[item]["exp"])
-        save_users()
-        
-        bot.send_message(
-            m.chat.id,
-            f"🛍️ *Покупка*\n📱 *{phone_name}*\n🏷️ {item.title()}\n{condition}\n💰 *{final_price:,}$*"
-        )
-        return
-    
-    bot.send_message(m.chat.id, "❌ Товар не найден")
-
-def show_inventory(m, page=1):
-    """Показывает инвентарь с пагинацией"""
-    user = get_user(m)
-    inv = user.get("inventory", [])
-    
-    if not inv:
-        bot.send_message(m.chat.id, "📱 У тебя нет телефонов")
-        return
-    
-    # Сортируем по цене
-    sorted_inv = sorted(inv, key=lambda x: x['price'], reverse=True)
-    
-    # Пагинация
-    per_page = 10
-    total_pages = (len(sorted_inv) + per_page - 1) // per_page
-    page = max(1, min(page, total_pages))
-    
-    start = (page - 1) * per_page
-    end = min(start + per_page, len(sorted_inv))
-    
-    total_value = sum(item['price'] for item in inv)
-    
-    msg = f"📱 *ТВОЙ СКЛАД (LVL {user['lvl']})*\n\n"
-    
-    for i in range(start, end):
-        item = sorted_inv[i]
-        # Обрезаем длинные названия
-        short_name = item['name'][:30] + "..." if len(item['name']) > 30 else item['name']
-        msg += f"*{i+1}.* {short_name}\n   {item['cond']} — *{item['price']:,}$*\n"
-    
-    msg += f"\n💰 *Всего:* {total_value:,}$"
-    msg += f"\n📄 Стр. {page}/{total_pages}"
-    msg += "\n\n`продать [номер]`"
-    
-    # Кнопки навигации
-    if total_pages > 1:
-        markup = types.InlineKeyboardMarkup()
-        if page > 1:
-            markup.add(types.InlineKeyboardButton("◀ Назад", callback_data=f"inv_page_{page-1}"))
-        if page < total_pages:
-            markup.add(types.InlineKeyboardButton("Вперед ▶", callback_data=f"inv_page_{page+1}"))
-        bot.send_message(m.chat.id, msg, reply_markup=markup)
-    else:
-        bot.send_message(m.chat.id, msg)
-
-def show_profile(m):
-    """Показывает профиль"""
-    user = get_user(m)
-    can, remaining = can_flip(user)
-    flip_status = "✅ Доступен" if can else f"⏳ Через: {remaining}"
-    total_value = sum(item['price'] for item in user['inventory'])
-    
-    # Прогресс уровня
-    next_lvl_xp = user['lvl'] * 150
-    progress = int((user['exp'] / next_lvl_xp) * 10) if next_lvl_xp > 0 else 0
-    progress_bar = "█" * progress + "░" * (10 - progress)
-    
-    msg = (
-        f"👤 *{user['name']}*\n\n"
-        f"💰 *Баланс:* {user['balance']:,}$\n"
-        f"📦 *Инвентарь:* {len(user['inventory'])} шт. (💎 {total_value:,}$)\n"
-        f"⭐ *Уровень:* {user['lvl']} [{progress_bar}] {user['exp']}/{next_lvl_xp} XP\n"
-        f"🎰 *Флип:* {flip_status}"
-    )
-    bot.send_message(m.chat.id, msg)
-
-def show_top(m):
-    """Показывает топ игроков"""
-    top = sorted(_users.values(), key=lambda x: x['balance'], reverse=True)[:10]
-    res = "🏆 *ТОП 10 БОГАТЫХ ПЕРЕКУПОВ:*\n\n"
-    
-    for i, u in enumerate(top, 1):
-        inv_value = sum(item['price'] for item in u.get('inventory', []))
-        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        res += f"{medal} {u['name']} — *{u['balance']:,}$* (💎 {inv_value:,}$) LVL {u['lvl']}\n"
-    
-    bot.send_message(m.chat.id, res)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower().startswith("продать "))
-def sell_command(m):
-    """Обрабатывает команду продажи"""
-    user = get_user(m)
-    
-    try:
-        parts = m.text.split()
-        if len(parts) < 2:
-            raise ValueError
-        
-        idx = int(parts[1]) - 1
-        process_sell_by_idx(m, idx)
-    except:
-        bot.send_message(m.chat.id, "❌ Используй: `продать [номер]`\nНомера смотри в `тл`")
-
-def process_sell_by_idx(m, idx):
-    """Продажа по индексу"""
-    user = get_user(m)
-    inv = user.get("inventory", [])
-    
-    if idx < 0 or idx >= len(inv):
-        bot.send_message(m.chat.id, "❌ Неверный номер")
-        return
-    
-    # Сортируем для соответствия нумерации
-    sorted_inv = sorted(inv, key=lambda x: x['price'], reverse=True)
-    
-    if idx >= len(sorted_inv):
-        bot.send_message(m.chat.id, "❌ Неверный номер")
-        return
-    
-    item = sorted_inv[idx]
-    
-    # Находим и удаляем
-    for i, inv_item in enumerate(inv):
-        if (inv_item['name'] == item['name'] and 
-            inv_item['price'] == item['price'] and 
-            inv_item['cond'] == item['cond']):
-            user["inventory"].pop(i)
-            break
-    
-    user["balance"] += item['price']
-    lvl_up = add_exp(user, 20)
-    save_users()
-    
-    short_name = item['name'][:30] + "..." if len(item['name']) > 30 else item['name']
-    msg = f"🤝 Ты продал *{short_name}* за *{item['price']:,}$*"
-    
-    if lvl_up:
-        msg += "\n\n🏆 *УРОВЕНЬ ПОВЫШЕН!*"
-    
-    bot.send_message(m.chat.id, msg)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "флип")
-def flip_command(m):
-    simulate_flip(m)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "тл")
-def inv_command(m):
-    show_inventory(m)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "профиль")
-def profile_command(m):
-    show_profile(m)
-
-@bot.message_handler(func=lambda m: m.text and m.text.lower() == "топ")
-def top_command(m):
-    show_top(m)
-
-# --- ЗАПУСК ---
-if __name__ == "__main__":
-    load_users()
-    logger.info("=" * 50)
-    logger.info("🚀 БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ")
-    logger.info(f"👑 Админ: @{ADMIN_USERNAME} (ID: {ADMIN_ID})")
-    logger.info(f"👥 Игроков в базе: {len(_users)}")
-    logger.info(f"📱 Генерация: {len(BRANDS)*len(MODEL_TYPES)*len(MODIFIERS):,}+ моделей")
-    logger.info("=" * 50)
-    
-    # Бесконечный перезапуск при падениях
-    while True:
-        try:
-            bot.infinity_polling(skip_pending=True, timeout=30, long_polling_timeout=30)
-        except Exception as e:
-            logger.exception(f"💥 Ошибка polling: {e}")
-            logger.info("🔄 Перезапуск через 15 секунд...")
-            time.sleep(15)
+bot.infinity_polling()
